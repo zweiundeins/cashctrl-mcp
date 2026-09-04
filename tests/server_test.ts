@@ -61,11 +61,13 @@ Deno.test("the tool surface stays small enough to be usable", async () => {
     "describe_endpoint",
     "download_document",
     "get_account_balance",
+    "get_fiscal_period_status",
     "get_journal",
     "get_record",
     "get_report",
     "list_open_invoices",
     "list_records",
+    "review_bank_import",
     "search",
     "search_api",
   ]);
@@ -417,13 +419,6 @@ Deno.test("the organisation summary is served as a resource", async () => {
 
 Deno.test("prompts carry the fiscal-period warning into the workflow", async () => {
   const { client } = await connect(() => json({ data: [] }));
-  const { prompts } = await client.listPrompts();
-  assertEquals(prompts.map((p: { name: string }) => p.name).sort(), [
-    "monatsabschluss-check",
-    "mwst-abstimmung",
-    "offene-posten",
-  ]);
-
   const prompt = await client.getPrompt({
     name: "monatsabschluss-check",
     arguments: { month: "2026-01" },
@@ -431,4 +426,214 @@ Deno.test("prompts carry the fiscal-period warning into the workflow", async () 
   const body = (prompt.messages[0].content as { text: string }).text;
   assertStringIncludes(body, "2026-01");
   assertStringIncludes(body, "nicht");
+});
+
+const ACCOUNTS = json({
+  data: [
+    { id: 3, number: "1020", name: "UBS", accountClass: "ASSET" },
+    {
+      id: 42,
+      number: "3200",
+      name: "Handelsertrag",
+      accountClass: "REVENUE",
+      taxId: 9,
+      taxCode: "USt77",
+    },
+    {
+      id: 60,
+      number: "6570",
+      name: "Informatikaufwand",
+      accountClass: "EXPENSE",
+    },
+  ],
+});
+
+/** Two bookings against 3200, one of them a same-day same-amount repeat. */
+const IMPORTED = json({
+  total: 3,
+  data: [
+    {
+      id: 1,
+      dateAdded: "2026-01-05 00:00:00.0",
+      amount: 100,
+      title: "A",
+      debitId: 3,
+      creditId: 42,
+      taxId: null,
+      taxCode: null,
+      associateId: 7,
+      associateName: "Kunde",
+    },
+    {
+      id: 2,
+      dateAdded: "2026-01-05 00:00:00.0",
+      amount: 100,
+      title: "A again",
+      debitId: 3,
+      creditId: 42,
+      taxId: 9,
+      taxCode: "USt77",
+      associateId: 7,
+      associateName: "Kunde",
+    },
+    {
+      id: 3,
+      dateAdded: "2026-02-01 00:00:00.0",
+      amount: 50,
+      title: "Kamera",
+      debitId: 60,
+      creditId: 3,
+      taxId: null,
+      taxCode: null,
+      associateId: null,
+    },
+  ],
+});
+
+function reviewStub(url: URL): Response {
+  if (url.pathname === "/api/v1/fiscalperiod/list.json") return PERIODS.clone();
+  if (url.pathname === "/api/v1/account/list.json") return ACCOUNTS.clone();
+  if (url.pathname === "/api/v1/journal/list.json") return IMPORTED.clone();
+  if (url.pathname === "/api/v1/journal/import/list.json") {
+    return json({
+      data: [{ id: 23, description: "statements.zip", created: "2026-06-08" }],
+    });
+  }
+  if (url.pathname === "/api/v1/journal/import/entry/list.json") {
+    return json({
+      data: [
+        { id: 181, imported: false, deleted: true, confirmed: false },
+        { id: 182, imported: true, deleted: false, confirmed: true },
+      ],
+    });
+  }
+  return json({ data: [] });
+}
+
+Deno.test("review_bank_import groups by contra account, bank side inferred", async () => {
+  const { client, calls } = await connect(reviewStub);
+  const parsed = JSON.parse(firstText(
+    await client.callTool({
+      name: "review_bank_import",
+      arguments: { fromDate: "2026-01-01", toDate: "2026-06-30" },
+    }),
+  ));
+
+  assertEquals(
+    calls.some((c) => c.searchParams.get("onlyImported") === "true"),
+    true,
+  );
+  assertStringIncludes(parsed.notes.join(" "), "1020 UBS");
+
+  // 1020 is on every entry, so it is the bank side and never a contra account.
+  const accounts = parsed.value.byContraAccount.map((g: { account: string }) =>
+    g.account
+  );
+  assertEquals(accounts.includes("1020 UBS"), false);
+  const revenue = parsed.value.byContraAccount.find((g: { account: string }) =>
+    g.account === "3200 Handelsertrag"
+  );
+  assertEquals(revenue.count, 2);
+  assertEquals(revenue.sum, 200);
+});
+
+Deno.test("review_bank_import only flags a missing tax code the account expects", async () => {
+  const { client } = await connect(reviewStub);
+  const parsed = JSON.parse(firstText(
+    await client.callTool({
+      name: "review_bank_import",
+      arguments: { fromDate: "2026-01-01", toDate: "2026-06-30" },
+    }),
+  ));
+
+  const flags = (id: number) =>
+    (parsed.value.flagged.find((f: { id: number }) => f.id === id)?.flags ??
+      []) as string[];
+
+  // 3200 defines a default tax code and entry 1 has none.
+  assertStringIncludes(flags(1).join(" "), "tax_missing");
+  // 6570 defines none, so entry 3 is not nagged about tax, only the associate.
+  assertEquals(flags(3).some((f) => f.startsWith("tax_missing")), false);
+  assertEquals(flags(3).includes("no_associate"), true);
+  // Both entries still count towards the aggregate.
+  assertEquals(parsed.value.summary.withoutTaxCode, 2);
+});
+
+Deno.test("review_bank_import spots a re-imported statement line", async () => {
+  const { client } = await connect(reviewStub);
+  const parsed = JSON.parse(firstText(
+    await client.callTool({
+      name: "review_bank_import",
+      arguments: { fromDate: "2026-01-01", toDate: "2026-06-30" },
+    }),
+  ));
+  const dupes = parsed.value.flagged.filter((f: { flags: string[] }) =>
+    f.flags.includes("possible_duplicate")
+  );
+  assertEquals(dupes.map((d: { id: number }) => d.id).sort(), [1, 2]);
+});
+
+Deno.test("review_bank_import surfaces entries that were never booked", async () => {
+  const { client } = await connect(reviewStub);
+  const parsed = JSON.parse(firstText(
+    await client.callTool({
+      name: "review_bank_import",
+      arguments: { fromDate: "2026-01-01", toDate: "2026-06-30" },
+    }),
+  ));
+  assertEquals(parsed.value.unbookedImports, [{
+    importId: 23,
+    description: "statements.zip",
+    created: "2026-06-08",
+    staged: 1,
+    ignored: 1,
+    confirmedNotBooked: 0,
+  }]);
+});
+
+Deno.test("get_fiscal_period_status reports the result and month state", async () => {
+  const { client } = await connect((url) => {
+    if (url.pathname === "/api/v1/fiscalperiod/list.json") {
+      return PERIODS.clone();
+    }
+    if (url.pathname === "/api/v1/fiscalperiod/read.json") {
+      return json({
+        data: {
+          id: 2,
+          name: "2026",
+          start: "2026-01-01 00:00:00.0",
+          end: "2026-12-31 23:59:59.0",
+          isClosed: false,
+          closedMonthIds: ["2026-01"],
+          openMonthIds: ["2026-02"],
+        },
+      });
+    }
+    if (url.pathname === "/api/v1/fiscalperiod/result") return json(15992);
+    return json({ data: [] });
+  });
+
+  const parsed = JSON.parse(firstText(
+    await client.callTool({
+      name: "get_fiscal_period_status",
+      arguments: { fiscalPeriodId: 2 },
+    }),
+  ));
+  assertEquals(parsed.result, 15992);
+  assertEquals(parsed.name, "2026");
+  assertEquals(parsed.closedMonths, ["2026-01"]);
+  assertEquals(parsed.pendingDepreciations, 0);
+});
+
+Deno.test("the new prompts are registered", async () => {
+  const { client } = await connect(() => json({ data: [] }));
+  const { prompts } = await client.listPrompts();
+  const names = prompts.map((p: { name: string }) => p.name).sort();
+  assertEquals(names, [
+    "bank-abgleich",
+    "jahresabschluss",
+    "monatsabschluss-check",
+    "mwst-abstimmung",
+    "offene-posten",
+  ]);
 });

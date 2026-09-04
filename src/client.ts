@@ -9,6 +9,15 @@ import type { Params } from "@zweiundeins/cashctrl-ts-sdk";
 import type { Config } from "./config.ts";
 import { assertAllowed } from "./policy.ts";
 
+export interface AccountSummary {
+  id: number;
+  number?: string;
+  name?: string;
+  accountClass?: string;
+  taxId?: number | null;
+  taxCode?: string | null;
+}
+
 export interface FiscalPeriod {
   id: number;
   name: string;
@@ -26,6 +35,7 @@ export class CashCtrlClient {
   readonly config: Config;
   readonly #http: CashCtrlHttp;
   #periods?: Promise<FiscalPeriod[]>;
+  #accounts?: Promise<Map<number, AccountSummary>>;
   readonly #customLabels = new Map<string, Promise<Map<string, string>>>();
 
   constructor(config: Config, http?: CashCtrlHttp) {
@@ -71,6 +81,20 @@ export class CashCtrlClient {
       return (body as { data: T }).data;
     }
     return body as T;
+  }
+
+  /** Accounts by id, for turning debit/credit ids into something readable. */
+  accounts(): Promise<Map<number, AccountSummary>> {
+    this.#accounts ??= this.listWithTotal<AccountSummary>(
+      "/api/v1/account/list.json",
+      { limit: 500 },
+    ).then((r) =>
+      new Map(r.data.map((a) => [a.id, {
+        ...a,
+        name: localize(String(a.name ?? ""), this.config.lang),
+      }]))
+    );
+    return this.#accounts;
   }
 
   fiscalPeriods(): Promise<FiscalPeriod[]> {

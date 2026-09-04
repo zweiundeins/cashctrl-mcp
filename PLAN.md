@@ -4,7 +4,7 @@ An MCP server for the CashCtrl accounting API, built on
 [`@zweiundeins/cashctrl-ts-sdk`](https://github.com/zweiundeins/cashctrl-ts-sdk)
 (v0.3.0, published to JSR and npm).
 
-Status: **phases 1 and 2 done** — 11 tools, 2 resources, 3 prompts, verified
+Status: **phases 1 and 2 done** — 13 tools, 2 resources, 5 prompts, verified
 against a live organisation. See [README.md](README.md). Only writes remain.
 
 ---
@@ -284,8 +284,30 @@ CASHCTRL_ENABLE_SALARY  off by default
 | 0 | ~~Upstream spec fixes in `cashctrl-ts-sdk`~~ | **done, released as 0.3.0**: 59 file endpoints carry real media types, 4 broken SDK methods fixed, `SIDE_EFFECTING_GETS` exported, `spec/index.json` + `deno task index` added |
 | 1 | ~~Skeleton + read tools + `format.ts` + policy/deny list~~ | **done**: 9 tools, 31 tests, smoke-tested read-only against `zweiundeinsgmbh` |
 | 2 | ~~Reports, documents, MCP resources and prompts~~ | **done**: `get_report`, `download_document`, 2 resources, 3 prompts; 37 tests |
-| 3 | Write mode, against a **disposable trial organisation only** | first live exercise of the SDK's write paths |
+| 3 | Write mode, against a **disposable trial organisation only** | first live exercise of the SDK's write paths; includes the bank-statement import chain below |
 | 4 | Packaging (dnt → npm), CI, README, `claude mcp add` instructions | |
+
+### Bank statement import (phase 3)
+
+Uploading a CAMT/MT940 file is reachable through the API, contrary to the
+initial assumption:
+
+1. `file/prepare` — post the metadata, get back file ids and pre-authenticated
+   `writeUrl`s on Oracle object storage.
+2. `PUT` the bytes to each `writeUrl` directly. Not a CashCtrl request; the SDK
+   is not involved.
+3. `file/persist` — save them into the file manager.
+4. `journal/import/create` — `fileId`, `targetAccountId` and `mappings` stage
+   the entries. Formats: camt.052/053/054, MT940, Excel, CSV, also inside a ZIP
+   or TAR, max 5 MB.
+5. Review and correct via `journal/import/entry/{list,read,update,confirm,delete}`.
+   `update` **auto-confirms** the entry, and is a full replacement like every
+   other update.
+6. `journal/import/execute` — the only step that books anything.
+
+Steps 1 to 5 create staged rows but touch no journal, which makes them the
+least dangerous writes in the API and a reasonable first target for phase 3.
+Step 6 is a real posting.
 
 ## 6. Decisions
 
@@ -304,9 +326,10 @@ Still open:
   contents, and the weekly upstream PR keeps it current.
 - **Multi-organisation**: one server per org (simple, matches the one-key-one-org
   API model) vs an `organisation` param on every tool.
-- **`fiscalperiod/depreciations`**: does its `id` mean the fiscal period?
-  Undocumented and unresolved (§7). If not, it is the single endpoint that
-  would still need a switch.
+- **`fiscalperiod/depreciations`**: does its `id` mean the fiscal period? Still
+  unresolved for lack of data, but `fiscalperiod/result?id=` and
+  `fiscalperiod/exchangediff?id=` both demonstrably mean the fiscal period, so
+  the convention is consistent. `get_fiscal_period_status` passes it as one.
 
 ## 7. Measured against a live organisation
 

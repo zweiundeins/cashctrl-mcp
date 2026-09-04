@@ -67,6 +67,12 @@ await show("list_records", { resource: "salary_statement", limit: 1 });
 await show("get_report", {});
 await show("get_report", { elementId: 2, fiscalPeriodId: 2 });
 
+await show("review_bank_import", {
+  fromDate: "2026-01-01",
+  toDate: "2026-06-30",
+});
+await show("get_fiscal_period_status", { fiscalPeriodId: 2 });
+
 const open = await client.callTool({
   name: "list_open_invoices",
   arguments: { limit: 1 },

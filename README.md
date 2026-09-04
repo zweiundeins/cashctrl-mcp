@@ -43,7 +43,7 @@ is the boundary that actually holds.
 
 ## Tools
 
-376 endpoints do not fit in a tool list, so this is eleven curated tools plus a
+376 endpoints do not fit in a tool list, so this is thirteen curated tools plus a
 searchable escape hatch for everything else.
 
 | Tool | What it does |
@@ -55,6 +55,8 @@ searchable escape hatch for everything else.
 | `get_journal` | Journal entries for a date range, account or associate |
 | `get_account_balance` | Balance of one account at a date |
 | `get_report` | Lists the available reports, or renders one for a period |
+| `review_bank_import` | Reviews how imported bank statements were booked |
+| `get_fiscal_period_status` | Result, closed months, pending depreciations and FX differences |
 | `download_document` | Invoices, salary documents, reports and files, written to disk |
 | `search_api` | Finds endpoints among all 376 by keyword |
 | `describe_endpoint` | Full parameter documentation for one endpoint |
@@ -70,9 +72,10 @@ rediscovering, and cost nothing until read:
 - `cashctrl://org/chart-of-accounts` — every account with number, class and tax
   code
 
-Three prompts wrap recurring work: `offene-posten`, `monatsabschluss-check`,
-`mwst-abstimmung`. Each one tells the model to establish the fiscal period
-before reading anything that depends on it.
+Five prompts wrap recurring work: `offene-posten`, `monatsabschluss-check`,
+`bank-abgleich`, `mwst-abstimmung` and `jahresabschluss`. Each one tells the
+model to establish the fiscal period before reading anything that depends on
+it, and to name write steps as tasks rather than attempt them.
 
 ## What it guards against
 
@@ -103,6 +106,13 @@ rather than errors. These are handled, and each is covered by a test:
   `dc`-prefixed duplicates. `get_report` follows the report's own
   `properties.columns` for what to show and what to call it, rather than
   guessing.
+- **A booking with no tax code is usually fine.** Only 3 of 147 accounts in
+  the organisation this was built against define a default tax code, so
+  `review_bank_import` flags a missing one only where the contra account
+  itself expects it, and reports the rest as an aggregate rather than 60 rows
+  of noise.
+- **Entries staged by an import but never booked are invisible in the
+  journal.** They are counted on the import side and reported separately.
 - **Documents never enter the conversation.** They are written to
   `CASHCTRL_DOWNLOAD_DIR` and returned as a path and a resource link. Filenames
   chosen by the server are sanitised to a basename first, so a
@@ -111,7 +121,7 @@ rather than errors. These are handled, and each is covered by a test:
 ## Development
 
 ```sh
-deno task test          # 37 tests, no network
+deno task test          # 43 tests, no network
 deno task check         # typecheck, lint, format
 deno task smoke         # read-only, against a live organisation (needs .env)
 deno task vendor:spec   # refresh spec/index.json from a tagged SDK release
@@ -130,6 +140,14 @@ aged past it.
 Every write tool. Writes need a disposable trial organisation first: creating
 an order or person consumes a sequence number permanently, even if the record
 is deleted again.
+
+That includes uploading bank statements, which **is** possible through the API
+even though nothing here does it yet: `file/prepare` returns pre-authenticated
+URLs, the bytes go up with a plain `PUT`, `file/persist` saves them, and
+`journal/import/create` stages the entries. CashCtrl accepts camt.052, camt.053,
+camt.054, MT940, Excel and CSV, including inside a ZIP, up to 5 MB. Nothing is
+booked until `journal/import/execute` runs, so the staging half is comparatively
+safe — but it still writes.
 
 ## License
 

@@ -60,6 +60,57 @@ export function registerPrompts(server: McpServer): void {
         "mit Buchungs-ID.",
     ));
 
+  definePrompt(server, "bank-abgleich", {
+    title: "Bankabgleich",
+    description: "Reviews how imported bank statements were booked.",
+    argsSchema: {
+      from: z.string().describe("Start date, YYYY-MM-DD"),
+      to: z.string().describe("End date, YYYY-MM-DD"),
+    },
+  }, ({ from, to }) =>
+    user(
+      `Prüfe, wie die importierten Bankbuchungen von ${from} bis ${to} ` +
+        "verbucht wurden.\n\n" +
+        "Nutze review_bank_import. Geh dabei so vor:\n" +
+        "- Schau zuerst die Verteilung nach Gegenkonto an: Konten mit vielen " +
+        "kleinen Buchungen oder ungewöhnlich hohen Summen sind verdächtig.\n" +
+        "- Nimm die markierten Buchungen einzeln durch und sag zu jeder, ob " +
+        "sie plausibel ist oder korrigiert gehört.\n" +
+        "- Weise ausdrücklich auf Importe hin, deren Einträge nie verbucht " +
+        "wurden — die sind sonst unsichtbar.\n\n" +
+        "Behaupte nichts über Buchungen, die du nicht gesehen hast, und " +
+        "korrigiere nichts selbst: dieser Server liest nur.",
+    ));
+
+  definePrompt(server, "jahresabschluss", {
+    title: "Jahresabschluss",
+    description: "Walks the year-end checklist for a fiscal period.",
+    argsSchema: {
+      fiscalPeriodId: z.string().optional().describe(
+        "Fiscal period id; defaults to the current one",
+      ),
+    },
+  }, ({ fiscalPeriodId }) =>
+    user(
+      `Führe mich durch den Jahresabschluss${
+        fiscalPeriodId ? ` für Fiskalperiode ${fiscalPeriodId}` : ""
+      }.\n\n` +
+        "Beginne mit get_fiscal_period_status: Ergebnis, abgeschlossene " +
+        "Monate, offene Abschreibungen und Währungsdifferenzen.\n\n" +
+        "Dann prüfe der Reihe nach:\n" +
+        "- Offene Posten: Debitoren und Kreditoren, die am Jahresende noch " +
+        "offen sind (list_open_invoices, beide Typen).\n" +
+        "- Durchlauf- und Verrechnungskonten, die nicht auf null stehen " +
+        "(get_account_balance auf das Periodenende).\n" +
+        "- Bilanz und Erfolgsrechnung über get_report gegenlesen; stimmt das " +
+        "Ergebnis mit fiscalperiod/result überein?\n" +
+        "- Bankbuchungen des Jahres mit review_bank_import durchsehen.\n\n" +
+        "Gib am Ende eine Liste der offenen Punkte aus, nach Dringlichkeit " +
+        "sortiert. Das Buchen von Abschreibungen, Währungsdifferenzen und das " +
+        "Abschliessen der Periode sind Schreibvorgänge und hier nicht " +
+        "möglich — nenne sie als Aufgaben, führe sie nicht aus.",
+    ));
+
   definePrompt(server, "mwst-abstimmung", {
     title: "MWST-Abstimmung",
     description: "Reconciles the VAT report against the VAT accounts.",
@@ -74,6 +125,9 @@ export function registerPrompts(server: McpServer): void {
         "für den Zeitraum, und vergleiche ihn mit den Salden der " +
         "MWST-Konten via get_account_balance. Nenne Differenzen mit Betrag " +
         "und wahrscheinlicher Ursache; behaupte keine Übereinstimmung, die du " +
-        "nicht gerechnet hast.",
+        "nicht gerechnet hast.\n\n" +
+        "Prüfe zusätzlich mit review_bank_import, ob importierte " +
+        "Bankbuchungen ohne Steuercode verbucht wurden — das ist die " +
+        "häufigste Ursache für eine zu tiefe Vorsteuer.",
     ));
 }
