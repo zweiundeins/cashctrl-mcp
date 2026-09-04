@@ -1,0 +1,29 @@
+{
+  "name": "@zweiundeins/cashctrl-mcp",
+  "version": "0.1.0",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/server.ts"
+  },
+  "minimumDependencyAge": "0",
+  "compilerOptions": {
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true
+  },
+  "tasks": {
+    "start": "deno run --allow-net --allow-env --allow-read --allow-write src/server.ts",
+    "vendor:spec": "deno run --allow-net --allow-write --allow-read scripts/vendor-index.ts",
+    "test": "deno test --allow-read --allow-net --allow-env tests/",
+    "smoke": "deno run --allow-read --allow-net --allow-env --env-file scripts/smoke.ts",
+    "check": "deno check src/*.ts src/tools/*.ts scripts/*.ts tests/*.ts && deno lint && deno fmt --check",
+    "ci": "deno task check && deno task test"
+  },
+  "lint": { "include": ["src", "scripts", "tests"] },
+  "fmt": { "include": ["src", "scripts", "tests"] },
+  "imports": {
+    "@modelcontextprotocol/sdk/": "npm:/@modelcontextprotocol/sdk@^1.30.0/",
+    "@zweiundeins/cashctrl-ts-sdk": "jsr:@zweiundeins/cashctrl-ts-sdk@^0.3.0",
+    "@std/assert": "jsr:@std/assert@^1",
+    "zod": "npm:zod@^4.5.4"
+  }
+}
