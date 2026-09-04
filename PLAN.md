@@ -4,7 +4,7 @@ An MCP server for the CashCtrl accounting API, built on
 [`@zweiundeins/cashctrl-ts-sdk`](https://github.com/zweiundeins/cashctrl-ts-sdk)
 (v0.3.0, published to JSR and npm).
 
-Status: **phases 1 and 2 done** — 13 tools, 2 resources, 5 prompts, verified
+Status: **phases 1 and 2 done** — 14 tools, 2 resources, 5 prompts, verified
 against a live organisation. See [README.md](README.md). Only writes remain.
 
 ---
@@ -308,6 +308,18 @@ initial assumption:
 Steps 1 to 5 create staged rows but touch no journal, which makes them the
 least dangerous writes in the API and a reasonable first target for phase 3.
 Step 6 is a real posting.
+
+**Payment matching is server-side.** Measured on the live organisation: staged
+entries come back with `orderId`, `creditId` (Debitoren) and `orderStatusId`
+already applied — not merely in the `guessed*` fields — and entry 116 points at
+invoice RE-202511.01 with status 18 "Bezahlt", which carries `isClosed: true`.
+There is no matching endpoint anywhere in the 376, and `order/payment/create`
+warns that skipping it means "we won't be able to match the payments from a
+camt file later", so the matching belongs to CashCtrl rather than to the UI.
+An import created through the API should therefore match identically.
+
+Not yet proven: every import observed was created *through the UI*. Confirming
+it needs one `journal/import/create` call against a trial organisation.
 
 ## 6. Decisions
 

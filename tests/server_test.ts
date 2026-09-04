@@ -68,6 +68,7 @@ Deno.test("the tool surface stays small enough to be usable", async () => {
     "list_open_invoices",
     "list_records",
     "review_bank_import",
+    "review_pending_import",
     "search",
     "search_api",
   ]);
@@ -636,4 +637,161 @@ Deno.test("the new prompts are registered", async () => {
     "mwst-abstimmung",
     "offene-posten",
   ]);
+});
+
+/** One staged entry matched to an invoice, one ignored, one already booked. */
+function stagingStub(url: URL): Response {
+  if (url.pathname === "/api/v1/fiscalperiod/list.json") return PERIODS.clone();
+  if (url.pathname === "/api/v1/account/list.json") return ACCOUNTS.clone();
+  if (url.pathname === "/api/v1/journal/import/list.json") {
+    return json({
+      data: [{
+        id: 18,
+        description: "statements.zip",
+        created: "2026-06-08",
+        targetAccountId: 3,
+      }],
+    });
+  }
+  if (url.pathname === "/api/v1/journal/import/read.json") {
+    return json({
+      data: { id: 18, description: "statements.zip", targetAccountId: 3 },
+    });
+  }
+  if (url.pathname === "/api/v1/journal/import/entry/list.json") {
+    return json({
+      total: 3,
+      data: [
+        {
+          id: 116,
+          dateAdded: "2026-05-20 00:00:00.0",
+          amount: 4852.35,
+          title: "Zahlung",
+          reference: "RE-202601.01",
+          debitId: 3,
+          creditId: 42,
+          associateName: "moxi AG",
+          orderId: 34,
+          orderStatusId: 18,
+          confirmed: true,
+          deleted: false,
+          imported: false,
+        },
+        {
+          id: 117,
+          dateAdded: "2026-05-21 00:00:00.0",
+          amount: 12,
+          title: "Spesen",
+          debitId: 60,
+          creditId: 3,
+          deleted: true,
+          imported: false,
+        },
+        {
+          id: 118,
+          dateAdded: "2026-05-22 00:00:00.0",
+          amount: 99,
+          title: "Alt",
+          debitId: 60,
+          creditId: 3,
+          imported: true,
+        },
+      ],
+    });
+  }
+  if (url.pathname === "/api/v1/order/read.json") {
+    return json({
+      data: {
+        id: 34,
+        nr: "RE-202601.01",
+        associateName: "moxi AG",
+        total: 4852.35,
+        open: 4852.35,
+        statusName: "Offen",
+      },
+    });
+  }
+  if (url.pathname === "/api/v1/order/category/read_status.json") {
+    return json({ data: { id: 18, name: "Bezahlt", isClosed: true } });
+  }
+  return json({ data: [] });
+}
+
+Deno.test("review_pending_import lists imports that still have unbooked entries", async () => {
+  const { client } = await connect(stagingStub);
+  const parsed = JSON.parse(firstText(
+    await client.callTool({ name: "review_pending_import", arguments: {} }),
+  ));
+  assertEquals(parsed.pendingImports, [{
+    importId: 18,
+    description: "statements.zip",
+    created: "2026-06-08",
+    targetAccount: "1020 UBS",
+    staged: 2,
+    ignored: 1,
+    matchedToOrders: 1,
+  }]);
+});
+
+Deno.test("review_pending_import names the invoices an execute would close", async () => {
+  const { client } = await connect(stagingStub);
+  const parsed = JSON.parse(firstText(
+    await client.callTool({
+      name: "review_pending_import",
+      arguments: { importId: 18 },
+    }),
+  ));
+
+  assertEquals(parsed.value.summary, {
+    entries: 3,
+    alreadyBooked: 1,
+    staged: 1,
+    ignored: 1,
+    wouldCloseOrders: 1,
+  });
+
+  const closing = parsed.value.wouldClose[0];
+  assertEquals(closing.entryId, 116);
+  assertEquals(closing.matchedOrder.nr, "RE-202601.01");
+  assertEquals(closing.matchedOrder.open, 4852.35);
+  assertEquals(closing.newStatus, {
+    id: 18,
+    name: "Bezahlt",
+    closesOrder: true,
+  });
+  assertStringIncludes(parsed.notes.join(" "), "cannot execute");
+});
+
+Deno.test("an ignored entry never lands in wouldClose", async () => {
+  const { client } = await connect((url) => {
+    if (url.pathname === "/api/v1/journal/import/entry/list.json") {
+      return json({
+        total: 1,
+        data: [{
+          id: 116,
+          dateAdded: "2026-05-20 00:00:00.0",
+          amount: 4852.35,
+          title: "Zahlung",
+          debitId: 3,
+          creditId: 42,
+          orderId: 34,
+          orderStatusId: 18,
+          deleted: true,
+          imported: false,
+        }],
+      });
+    }
+    return stagingStub(url);
+  });
+  const parsed = JSON.parse(firstText(
+    await client.callTool({
+      name: "review_pending_import",
+      arguments: { importId: 18 },
+    }),
+  ));
+  assertEquals(parsed.value.wouldClose, []);
+  assertEquals(
+    parsed.value.ignoredWithMatch[0].matchedOrder.nr,
+    "RE-202601.01",
+  );
 });

@@ -43,7 +43,7 @@ is the boundary that actually holds.
 
 ## Tools
 
-376 endpoints do not fit in a tool list, so this is thirteen curated tools plus a
+376 endpoints do not fit in a tool list, so this is fourteen curated tools plus a
 searchable escape hatch for everything else.
 
 | Tool | What it does |
@@ -56,6 +56,7 @@ searchable escape hatch for everything else.
 | `get_account_balance` | Balance of one account at a date |
 | `get_report` | Lists the available reports, or renders one for a period |
 | `review_bank_import` | Reviews how imported bank statements were booked |
+| `review_pending_import` | Shows what executing a staged import would do, before it runs |
 | `get_fiscal_period_status` | Result, closed months, pending depreciations and FX differences |
 | `download_document` | Invoices, salary documents, reports and files, written to disk |
 | `search_api` | Finds endpoints among all 376 by keyword |
@@ -113,6 +114,11 @@ rather than errors. These are handled, and each is covered by a test:
   of noise.
 - **Entries staged by an import but never booked are invisible in the
   journal.** They are counted on the import side and reported separately.
+- **Executing a bank import can close customer invoices.** CashCtrl matches
+  incoming payments against open invoices when the import is *created*, and
+  the matched entry carries the target status. `review_pending_import` lists
+  which invoices an execute would close, and with what status, before it
+  happens.
 - **Documents never enter the conversation.** They are written to
   `CASHCTRL_DOWNLOAD_DIR` and returned as a path and a resource link. Filenames
   chosen by the server are sanitised to a basename first, so a
@@ -121,7 +127,7 @@ rather than errors. These are handled, and each is covered by a test:
 ## Development
 
 ```sh
-deno task test          # 43 tests, no network
+deno task test          # 46 tests, no network
 deno task check         # typecheck, lint, format
 deno task smoke         # read-only, against a live organisation (needs .env)
 deno task vendor:spec   # refresh spec/index.json from a tagged SDK release
@@ -141,13 +147,23 @@ Every write tool. Writes need a disposable trial organisation first: creating
 an order or person consumes a sequence number permanently, even if the record
 is deleted again.
 
-That includes uploading bank statements, which **is** possible through the API
+### Bank statement import
+
+Uploading bank statements **is** possible through the API
 even though nothing here does it yet: `file/prepare` returns pre-authenticated
 URLs, the bytes go up with a plain `PUT`, `file/persist` saves them, and
 `journal/import/create` stages the entries. CashCtrl accepts camt.052, camt.053,
 camt.054, MT940, Excel and CSV, including inside a ZIP, up to 5 MB. Nothing is
 booked until `journal/import/execute` runs, so the staging half is comparatively
 safe — but it still writes.
+
+The payment matching that closes customer invoices is done by CashCtrl at
+`journal/import/create`, not by the web UI: there is no matching endpoint
+anywhere in the 376, and staged entries come back with `orderId`, the contra
+account and the target `orderStatusId` already filled in. So an API import
+should match exactly as the UI does. Until that is proven against a trial
+organisation, upload in the UI and use `review_pending_import` to check the
+matches before executing.
 
 ## License
 

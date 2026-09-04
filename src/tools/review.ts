@@ -287,3 +287,182 @@ export function registerReviewTools(
     }, lang)));
   });
 }
+
+interface StagedEntry extends Entry {
+  importId?: number;
+  orderId?: number | null;
+  orderStatusId?: number | null;
+  confirmed?: boolean;
+  deleted?: boolean;
+  imported?: boolean;
+  duplicate?: boolean;
+  taxCode?: string | null;
+}
+
+/** Registers the pre-execute review of a staged bank import. */
+export function registerStagingTools(
+  server: McpServer,
+  client: CashCtrlClient,
+): void {
+  const lang = client.config.lang;
+
+  defineTool(server, "review_pending_import", {
+    title: "Review a staged bank import",
+    description:
+      "Shows what executing a bank import would do, before it is executed. " +
+      "CashCtrl matches incoming payments against open invoices when the " +
+      "import is created, so an execute can close customer invoices — this " +
+      "lists exactly which ones. Without `importId`, lists imports that still " +
+      "have unbooked entries.",
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    inputSchema: {
+      importId: z.number().int().optional(),
+      fiscalPeriodId: z.number().int().optional(),
+    },
+  }, async (args) => {
+    const periods = await client.fiscalPeriods();
+    const fiscalPeriodId = args.fiscalPeriodId ??
+      periods.find((p) => p.isCurrent)?.id;
+
+    if (args.importId === undefined) {
+      const imports = await client.listWithTotal<Row>(
+        "/api/v1/journal/import/list.json",
+        { fiscalPeriodId, limit: 50 },
+      );
+      const accounts = await client.accounts();
+      const pending: Row[] = [];
+      for (const record of imports.data) {
+        const entries = await client.listWithTotal<StagedEntry>(
+          "/api/v1/journal/import/entry/list.json",
+          { importId: record.id as number, limit: 200 },
+        );
+        const staged = entries.data.filter((e) => !e.imported);
+        if (!staged.length) continue;
+        pending.push({
+          importId: record.id,
+          description: record.description,
+          created: String(record.created ?? "").slice(0, 10),
+          targetAccount: label(
+            accounts.get(record.targetAccountId as number),
+          ),
+          staged: staged.length,
+          ignored: staged.filter((e) => e.deleted).length,
+          matchedToOrders: staged.filter((e) => e.orderId).length,
+        });
+      }
+      return text(renderValue(localizeDeep({ pendingImports: pending }, lang)));
+    }
+
+    const [record, entries, accounts] = await Promise.all([
+      client.read<Row>("/api/v1/journal/import/read.json", {
+        id: args.importId,
+      }),
+      client.listWithTotal<StagedEntry>(
+        "/api/v1/journal/import/entry/list.json",
+        { importId: args.importId, limit: 500 },
+      ),
+      client.accounts(),
+    ]);
+
+    const orders = new Map<number, Row>();
+    const statuses = new Map<number, Row>();
+    for (const entry of entries.data) {
+      if (entry.orderId && !orders.has(entry.orderId)) {
+        orders.set(
+          entry.orderId,
+          await client.read<Row>("/api/v1/order/read.json", {
+            id: entry.orderId,
+          }),
+        );
+      }
+      if (entry.orderStatusId && !statuses.has(entry.orderStatusId)) {
+        statuses.set(
+          entry.orderStatusId,
+          await client.read<Row>("/api/v1/order/category/read_status.json", {
+            id: entry.orderStatusId,
+          }),
+        );
+      }
+    }
+
+    const describe = (entry: StagedEntry): Row => {
+      const order = entry.orderId ? orders.get(entry.orderId) : undefined;
+      const status = entry.orderStatusId
+        ? statuses.get(entry.orderStatusId)
+        : undefined;
+      return {
+        entryId: entry.id,
+        date: entry.dateAdded?.slice(0, 10),
+        amount: entry.amount,
+        title: entry.title,
+        reference: entry.reference,
+        contra: label(
+          accounts.get(
+            (entry.debitId === record.targetAccountId
+              ? entry.creditId
+              : entry.debitId) as number,
+          ),
+        ),
+        associate: entry.associateName || null,
+        taxCode: entry.taxCode ?? null,
+        state: entry.deleted
+          ? "ignored"
+          : entry.confirmed
+          ? "confirmed"
+          : "staged",
+        ...(order
+          ? {
+            matchedOrder: {
+              id: entry.orderId,
+              nr: order.nr,
+              associate: order.associateName,
+              total: order.total,
+              open: order.open,
+              currentStatus: order.statusName,
+            },
+            newStatus: status
+              ? {
+                id: status.id,
+                name: status.name,
+                closesOrder: status.isClosed,
+              }
+              : { id: entry.orderStatusId },
+          }
+          : {}),
+      };
+    };
+
+    const staged = entries.data.filter((e) => !e.imported);
+    const live = staged.filter((e) => !e.deleted);
+    const wouldClose = live
+      .filter((e) => e.orderId && statuses.get(e.orderStatusId ?? 0)?.isClosed)
+      .map(describe);
+    const ignoredWithMatch = staged
+      .filter((e) => e.deleted && e.orderId)
+      .map(describe);
+
+    return text(renderValue(
+      localizeDeep({
+        importId: args.importId,
+        description: record.description,
+        targetAccount: label(accounts.get(record.targetAccountId as number)),
+        summary: {
+          entries: entries.total,
+          alreadyBooked: entries.data.length - staged.length,
+          staged: live.length,
+          ignored: staged.length - live.length,
+          wouldCloseOrders: wouldClose.length,
+        },
+        wouldClose,
+        ignoredWithMatch,
+        entries: live.map(describe),
+      }, lang),
+      [
+        "Matching is done by CashCtrl when the import is created, so these " +
+        "matches are the same ones the web UI shows.",
+        "Executing the import books every confirmed entry and applies the " +
+        "statuses below. This server cannot execute it.",
+      ],
+    ));
+  });
+}

@@ -12,7 +12,7 @@ import { registerReadTools } from "./tools/read.ts";
 import { registerDiscoveryTools } from "./tools/discovery.ts";
 import { registerReportTools } from "./tools/report.ts";
 import { registerDocumentTools } from "./tools/documents.ts";
-import { registerReviewTools } from "./tools/review.ts";
+import { registerReviewTools, registerStagingTools } from "./tools/review.ts";
 import { registerResources } from "./context.ts";
 import { registerPrompts } from "./prompts.ts";
 
@@ -40,6 +40,7 @@ export function createServer(client: CashCtrlClient): McpServer {
   registerReportTools(server, client);
   registerDocumentTools(server, client);
   registerReviewTools(server, client);
+  registerStagingTools(server, client);
   registerDiscoveryTools(server, client);
   registerResources(server, client);
   registerPrompts(server);
