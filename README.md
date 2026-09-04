@@ -60,8 +60,8 @@ searchable escape hatch for everything else.
 | `get_fiscal_period_status` | Result, closed months, pending depreciations and FX differences |
 | `get_history` | CashCtrl's activity log: who changed what, when |
 | `validate_year_end` | Runs the arithmetic a close has to satisfy, check by check |
-| `create_backup` | Dumps every readable entity, and the file manager, to disk |
-| `diff_backups` | Compares two backups field by field |
+| `create_backup` | Syncs every readable entity into SQLite, incrementally |
+| `backup_changes` | What changed between runs, field by field |
 | `download_document` | Invoices, salary documents, reports and files, written to disk |
 | `search_api` | Finds endpoints among all 376 by keyword |
 | `describe_endpoint` | Full parameter documentation for one endpoint |
@@ -136,36 +136,52 @@ than raising a false alarm every close.
 
 ## Backups, and the versioning CashCtrl does not have
 
-`create_backup` writes every readable entity to a timestamped directory as
-JSON, plus the file manager's contents. A full run against the organisation
-this was built on took **31 seconds**: 1,902 entities and 48 files, 57 MB of
-which is blobs.
+`create_backup` syncs everything readable into a SQLite database and writes a
+new version of a record only when its contents actually change. Measured
+against the organisation this was built on:
 
+| Run | Time | Entities | Files |
+| --- | --- | --- | --- |
+| First | 38 s | 1,940 stored | 48 fetched, 57 MB |
+| Every run after | 11 s | 1,902 seen, 0 written | 0 fetched, 0 bytes |
+
+The database settles at ~60 MB and then stops growing: consecutive no-op runs
+leave it byte-for-byte identical. The 11 seconds are the full id sweep, which
+cannot be skipped — `lastUpdated` filtering works, but no filter can reveal a
+*deletion*, and an unknown filter field is silently ignored rather than
+rejected, so a filter can never be trusted to have applied.
+
+Entities are stored as JSON documents with a content hash rather than typed
+columns, because CashCtrl adds and renames fields without announcing it and a
+rigid schema would break on the next upstream change.
+
+```sql
+entity(resource, entity_id, period_id, hash, doc, first_seen, gone_at)
+blob(hash, size, mime, bytes)              -- deduplicated by content
+file_version(file_id, hash, name, first_seen, gone_at)
+run(id, started_at, seen, created, changed, gone, …)
 ```
-<org>/<timestamp>/manifest.json          counts, periods, what was skipped
-                  master/*.json          persons, accounts, taxes, layouts, history …
-                  period-<id>/*.json     journal, orders, imports, staged entries
-                  period-<id>/orders_detail.json   line items, which only `read` returns
-                  files/<id>-<name>      file manager contents
-```
+
+`backup_changes` reads that history back: what was created, changed or removed
+between two runs, each field's `from` and `to`, and — with `entityId` — the
+full version history of one record. `lastUpdated` is ignored, since it moves
+whenever anything else does.
 
 Three things worth knowing:
 
 - **It is an archive, not a restore point.** Ids do not round-trip, creates
-  consume sequence numbers, and closed periods reject writes. Nothing in a
-  backup can be pushed back into CashCtrl.
+  consume sequence numbers, and closed periods reject writes. Nothing here can
+  be pushed back into CashCtrl.
 - **Generated invoice PDFs are excluded on purpose.** Fetching one appends a
   `DOWNLOAD` entry to the history log, so including them would corrupt the very
-  record a backup exists to preserve — 25+ spurious entries per run. Reading
-  file *contents* was measured and logs nothing, so the file manager is safe to
-  include, and that is where your original bank statement files live.
-- **Rows are sorted by id and object keys alphabetically**, so two snapshots
-  diff cleanly, by eye or in git.
+  record a backup exists to preserve. Reading file *contents* was measured and
+  logs nothing, so the file manager is included — and that is where your
+  original bank statement files live.
+- **It only knows what it has seen.** History before the first run is gone for
+  good; CashCtrl cannot supply it.
 
-`diff_backups` turns that into the record-level history the API does not offer:
-what was added, what was removed with its previous contents, and for changes,
-each field's `from` and `to`. `lastUpdated` is ignored, since it moves whenever
-anything else does.
+SQLite comes from `node:sqlite`, built into Deno, so there is no dependency and
+no `--allow-ffi`.
 
 ## What it guards against
 
@@ -216,7 +232,7 @@ rather than errors. These are handled, and each is covered by a test:
 ## Development
 
 ```sh
-deno task test          # 55 tests, no network
+deno task test          # 58 tests, no network
 deno task check         # typecheck, lint, format
 deno task smoke         # read-only, against a live organisation (needs .env)
 deno task vendor:spec   # refresh spec/index.json from a tagged SDK release

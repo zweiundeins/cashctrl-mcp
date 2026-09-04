@@ -289,9 +289,19 @@ CASHCTRL_ENABLE_SALARY  off by default
 
 ### Backups
 
-Measured: a full dump of the live organisation is 1,902 entities across 26
-list calls, ~1.5 MB of JSON, plus 48 files totalling 57 MB, in 31 seconds at a
-120 ms throttle. Cheap enough to run daily.
+Incremental, into SQLite via `node:sqlite` (built into Deno, no FFI). First run
+38 s and 57 MB of files; every run after is 11 s, zero files, zero rows written,
+and leaves the database byte-for-byte identical.
+
+Why the sweep cannot be skipped: `lastUpdated` filtering does work (journal 118
+rows drops to 57 for `gt 2026-06-01`), but no filter reveals a **deletion**, and
+an unknown filter field is **silently ignored** rather than rejected — a
+`bogusField` filter returned all 118 rows. Filters therefore fail safe, toward
+over-fetching, but can never be trusted to have applied. Content hashing decides
+what changed; the filter is only ever an optimisation.
+
+Entities are stored as JSON documents plus a content hash rather than typed
+columns, because upstream adds and renames fields unannounced.
 
 `file/get` was measured against the history log and appends **nothing** (881
 entries before and after), unlike `order/document/read.pdf`, which appends a

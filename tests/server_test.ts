@@ -57,10 +57,10 @@ Deno.test("the tool surface stays small enough to be usable", async () => {
   const { tools } = await client.listTools();
   const names = tools.map((t: { name: string }) => t.name).sort();
   assertEquals(names, [
+    "backup_changes",
     "call_api",
     "create_backup",
     "describe_endpoint",
-    "diff_backups",
     "download_document",
     "get_account_balance",
     "get_fiscal_period_status",
@@ -1040,102 +1040,4 @@ Deno.test("clearing accounts that are not zero come back as a warning", async ()
   const check = checkOf(parsed, "clearing_accounts_zero")!;
   assertEquals(check.status, "warn");
   assertEquals(check.accounts![0].balance, 12306.8);
-});
-
-Deno.test("create_backup writes a manifest and records what it could not read", async () => {
-  const dir = await Deno.makeTempDir();
-  try {
-    const { client } = await connect((url) => {
-      if (url.pathname === "/api/v1/fiscalperiod/list.json") {
-        return PERIODS.clone();
-      }
-      if (url.pathname === "/api/v1/journal/list.json") {
-        return json({
-          data: [{ id: 2, amount: 5, title: "b" }, {
-            id: 1,
-            amount: 9,
-            title: "a",
-          }],
-        });
-      }
-      if (url.pathname.startsWith("/api/v1/salary/")) return json({ data: [] });
-      return json({ data: [] });
-    }, { downloadDir: dir });
-
-    const result = JSON.parse(firstText(
-      await client.callTool({
-        name: "create_backup",
-        arguments: { outputDir: dir, includeFiles: false, throttleMs: 0 },
-      }),
-    ));
-
-    const manifest = JSON.parse(
-      await Deno.readTextFile(`${result.path}/manifest.json`),
-    );
-    assertEquals(manifest.organisation, "testorg");
-    assertEquals(manifest.periodsBackedUp, [1, 2]);
-    assertEquals(manifest.files.included, false);
-    // Salary is disabled in this config, so it is skipped rather than fatal.
-    assertStringIncludes(
-      JSON.stringify(manifest.skipped),
-      "not permitted in this configuration",
-    );
-
-    // Rows are ordered by id and keys sorted, so two snapshots diff cleanly.
-    const journal = JSON.parse(
-      await Deno.readTextFile(`${result.path}/period-1/journal.json`),
-    );
-    assertEquals(journal.map((r: { id: number }) => r.id), [1, 2]);
-    assertEquals(Object.keys(journal[0]), ["amount", "id", "title"]);
-  } finally {
-    await Deno.remove(dir, { recursive: true });
-  }
-});
-
-Deno.test("diff_backups reports added, changed and removed records", async () => {
-  const dir = await Deno.makeTempDir();
-  try {
-    const write = async (sub: string, rows: unknown) => {
-      await Deno.mkdir(`${dir}/${sub}/period-1`, { recursive: true });
-      await Deno.writeTextFile(
-        `${dir}/${sub}/period-1/journal.json`,
-        JSON.stringify(rows),
-      );
-    };
-    await write("a", [
-      { id: 1, amount: 10, title: "one", lastUpdated: "2026-01-01" },
-      { id: 2, amount: 20, title: "two" },
-    ]);
-    await write("b", [
-      { id: 1, amount: 99, title: "one", lastUpdated: "2026-06-01" },
-      { id: 3, amount: 30, title: "three" },
-    ]);
-
-    const { client } = await connect(() => json({ data: [] }), {
-      downloadDir: dir,
-    });
-    const parsed = JSON.parse(firstText(
-      await client.callTool({
-        name: "diff_backups",
-        arguments: { from: `${dir}/a`, to: `${dir}/b` },
-      }),
-    ));
-
-    assertEquals(parsed.summary, { added: 1, changed: 1, removed: 1 });
-    const changes = parsed.resources[0].changes;
-    const changed = changes.find((c: { id: number }) => c.id === 1);
-    assertEquals(changed.fields.amount, { from: 10, to: 99 });
-    // lastUpdated moves whenever anything else does, so it is not a change.
-    assertEquals(changed.fields.lastUpdated, undefined);
-    assertEquals(
-      changes.find((c: { id: number }) => c.id === 3).change,
-      "added",
-    );
-    assertEquals(
-      changes.find((c: { id: number }) => c.id === 2).was.title,
-      "two",
-    );
-  } finally {
-    await Deno.remove(dir, { recursive: true });
-  }
 });
