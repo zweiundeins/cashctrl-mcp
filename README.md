@@ -15,22 +15,49 @@ user**. The key is scoped to one organisation and inherits the role you give
 it — **assign a read-only role**. That role, not this server's `CASHCTRL_MODE`,
 is the boundary that actually holds.
 
+```sh
+claude mcp add cashctrl \
+  --env CASHCTRL_ORGANISATION=myorg \
+  --env CASHCTRL_APIKEY=... \
+  -- deno run \
+     --allow-net=myorg.cashctrl.com,objectstorage.eu-zurich-1.oraclecloud.com \
+     --allow-env=CASHCTRL_ORGANISATION,CASHCTRL_APIKEY,CASHCTRL_LANG,CASHCTRL_MODE,CASHCTRL_DOWNLOAD_DIR,CASHCTRL_ENABLE_SALARY \
+     --allow-read=$HOME/cashctrl --allow-write=$HOME/cashctrl \
+     jsr:@zweiundeins/cashctrl-mcp
+```
+
+Or the equivalent in `claude_desktop_config.json`:
+
 ```jsonc
-// claude_desktop_config.json, or `claude mcp add`
 {
   "mcpServers": {
     "cashctrl": {
       "command": "deno",
-      "args": ["run", "--allow-net", "--allow-env", "--allow-read",
-               "jsr:@zweiundeins/cashctrl-mcp"],
+      "args": [
+        "run",
+        "--allow-net=myorg.cashctrl.com,objectstorage.eu-zurich-1.oraclecloud.com",
+        "--allow-env=CASHCTRL_ORGANISATION,CASHCTRL_APIKEY,CASHCTRL_LANG,CASHCTRL_MODE,CASHCTRL_DOWNLOAD_DIR,CASHCTRL_ENABLE_SALARY",
+        "--allow-read=/Users/me/cashctrl",
+        "--allow-write=/Users/me/cashctrl",
+        "jsr:@zweiundeins/cashctrl-mcp"
+      ],
       "env": {
         "CASHCTRL_ORGANISATION": "myorg",
-        "CASHCTRL_APIKEY": "..."
+        "CASHCTRL_APIKEY": "...",
+        "CASHCTRL_DOWNLOAD_DIR": "/Users/me/cashctrl"
       }
     }
   }
 }
 ```
+
+The permissions are narrow on purpose. `--allow-net` needs both hosts: CashCtrl
+itself, and the object storage its file downloads redirect to. Read and write
+are only needed for the directory documents and backups land in — drop them
+both if you never use `download_document` or `create_backup`.
+
+Needs Deno 2.x. SQLite comes from `node:sqlite`, which is built in, so there is
+no dependency to install and no `--allow-ffi`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -39,7 +66,7 @@ is the boundary that actually holds.
 | `CASHCTRL_LANG` | `de` | Language for localized fields and errors |
 | `CASHCTRL_MODE` | `read` | `write` unlocks POSTs via `call_api` |
 | `CASHCTRL_ENABLE_SALARY` | off | `1` exposes the salary module |
-| `CASHCTRL_DOWNLOAD_DIR` | cwd | For the document tools (not yet built) |
+| `CASHCTRL_DOWNLOAD_DIR` | cwd | Where documents and the backup database go |
 
 ## Tools
 

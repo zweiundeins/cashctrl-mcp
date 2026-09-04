@@ -1,5 +1,7 @@
 /** Search over the vendored endpoint index (see scripts/vendor-index.ts). */
 
+import indexJson from "../spec/index.json" with { type: "json" };
+
 export interface SpecParam {
   name: string;
   type:
@@ -31,9 +33,7 @@ interface SpecIndex {
   endpoints: SpecEndpoint[];
 }
 
-const index: SpecIndex = JSON.parse(
-  await Deno.readTextFile(new URL("../spec/index.json", import.meta.url)),
-);
+const index = indexJson as SpecIndex;
 
 export const endpoints: readonly SpecEndpoint[] = index.endpoints;
 

@@ -1,0 +1,39 @@
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # JSR authenticates over OIDC, so there is no token secret. The package
+      # must be linked to this repository in its jsr.io settings first.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Verify the tag matches deno.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(deno eval 'console.log(JSON.parse(Deno.readTextFileSync("deno.json")).version)')"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match deno.json version $version"
+            exit 1
+          fi
+
+      - name: Test
+        run: |
+          deno fmt --check
+          deno lint
+          deno check src/*.ts src/backup/*.ts src/tools/*.ts
+          deno test --allow-read --allow-net --allow-env --allow-write tests/
+
+      - run: deno publish

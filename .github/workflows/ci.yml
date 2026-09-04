@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Format, lint and typecheck
+        run: |
+          deno fmt --check
+          deno lint
+          deno check src/*.ts src/backup/*.ts src/tools/*.ts scripts/*.ts tests/*.ts
+
+      - name: Test
+        run: deno test --allow-read --allow-net --allow-env --allow-write tests/
+
+      - name: Publish dry run
+        run: deno publish --dry-run

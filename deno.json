@@ -10,6 +10,10 @@
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true
   },
+  "publish": {
+    "include": ["src", "spec", "README.md", "LICENSE", "deno.json"],
+    "exclude": ["tests", "scripts"]
+  },
   "tasks": {
     "start": "deno run --allow-net --allow-env --allow-read --allow-write src/server.ts",
     "vendor:spec": "deno run --allow-net --allow-write --allow-read scripts/vendor-index.ts",
