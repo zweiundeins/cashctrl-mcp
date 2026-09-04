@@ -43,7 +43,7 @@ is the boundary that actually holds.
 
 ## Tools
 
-376 endpoints do not fit in a tool list, so this is sixteen curated tools plus a
+376 endpoints do not fit in a tool list, so this is eighteen curated tools plus a
 searchable escape hatch for everything else.
 
 | Tool | What it does |
@@ -60,6 +60,8 @@ searchable escape hatch for everything else.
 | `get_fiscal_period_status` | Result, closed months, pending depreciations and FX differences |
 | `get_history` | CashCtrl's activity log: who changed what, when |
 | `validate_year_end` | Runs the arithmetic a close has to satisfy, check by check |
+| `create_backup` | Dumps every readable entity, and the file manager, to disk |
+| `diff_backups` | Compares two backups field by field |
 | `download_document` | Invoices, salary documents, reports and files, written to disk |
 | `search_api` | Finds endpoints among all 376 by keyword |
 | `describe_endpoint` | Full parameter documentation for one endpoint |
@@ -132,6 +134,39 @@ every period. The tool shows the open documents, the gross and credit-note-
 negated sums, and the account balances, and leaves the comparison to you rather
 than raising a false alarm every close.
 
+## Backups, and the versioning CashCtrl does not have
+
+`create_backup` writes every readable entity to a timestamped directory as
+JSON, plus the file manager's contents. A full run against the organisation
+this was built on took **31 seconds**: 1,902 entities and 48 files, 57 MB of
+which is blobs.
+
+```
+<org>/<timestamp>/manifest.json          counts, periods, what was skipped
+                  master/*.json          persons, accounts, taxes, layouts, history …
+                  period-<id>/*.json     journal, orders, imports, staged entries
+                  period-<id>/orders_detail.json   line items, which only `read` returns
+                  files/<id>-<name>      file manager contents
+```
+
+Three things worth knowing:
+
+- **It is an archive, not a restore point.** Ids do not round-trip, creates
+  consume sequence numbers, and closed periods reject writes. Nothing in a
+  backup can be pushed back into CashCtrl.
+- **Generated invoice PDFs are excluded on purpose.** Fetching one appends a
+  `DOWNLOAD` entry to the history log, so including them would corrupt the very
+  record a backup exists to preserve — 25+ spurious entries per run. Reading
+  file *contents* was measured and logs nothing, so the file manager is safe to
+  include, and that is where your original bank statement files live.
+- **Rows are sorted by id and object keys alphabetically**, so two snapshots
+  diff cleanly, by eye or in git.
+
+`diff_backups` turns that into the record-level history the API does not offer:
+what was added, what was removed with its previous contents, and for changes,
+each field's `from` and `to`. `lastUpdated` is ignored, since it moves whenever
+anything else does.
+
 ## What it guards against
 
 The CashCtrl API has a few behaviours that produce confident wrong answers
@@ -181,7 +216,7 @@ rather than errors. These are handled, and each is covered by a test:
 ## Development
 
 ```sh
-deno task test          # 53 tests, no network
+deno task test          # 55 tests, no network
 deno task check         # typecheck, lint, format
 deno task smoke         # read-only, against a live organisation (needs .env)
 deno task vendor:spec   # refresh spec/index.json from a tagged SDK release

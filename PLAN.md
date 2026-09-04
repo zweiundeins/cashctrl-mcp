@@ -4,7 +4,7 @@ An MCP server for the CashCtrl accounting API, built on
 [`@zweiundeins/cashctrl-ts-sdk`](https://github.com/zweiundeins/cashctrl-ts-sdk)
 (v0.3.0, published to JSR and npm).
 
-Status: **phases 1 and 2 done** — 16 tools, 2 resources, 5 prompts, verified
+Status: **phases 1 and 2 done** — 18 tools, 2 resources, 5 prompts, verified
 against a live organisation. See [README.md](README.md). Only writes remain.
 
 ---
@@ -286,6 +286,21 @@ CASHCTRL_ENABLE_SALARY  off by default
 | 2 | ~~Reports, documents, MCP resources and prompts~~ | **done**: `get_report`, `download_document`, 2 resources, 3 prompts; 37 tests |
 | 3 | Write mode, against a **disposable trial organisation only** | first live exercise of the SDK's write paths; includes the bank-statement import chain below |
 | 4 | Packaging (dnt → npm), CI, README, `claude mcp add` instructions | |
+
+### Backups
+
+Measured: a full dump of the live organisation is 1,902 entities across 26
+list calls, ~1.5 MB of JSON, plus 48 files totalling 57 MB, in 31 seconds at a
+120 ms throttle. Cheap enough to run daily.
+
+`file/get` was measured against the history log and appends **nothing** (881
+entries before and after), unlike `order/document/read.pdf`, which appends a
+`DOWNLOAD` entry per call. So file blobs are in by default and generated PDFs
+are out.
+
+Snapshot plus diff is the answer to the missing record versioning: it cannot
+recover history from before the first snapshot, but from that point on it gives
+field-level before-and-after, including the full contents of deleted records.
 
 ### Year-end arithmetic, measured
 
