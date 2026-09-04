@@ -72,6 +72,7 @@ Deno.test("the tool surface stays small enough to be usable", async () => {
     "review_pending_import",
     "search",
     "search_api",
+    "validate_year_end",
   ]);
   assertEquals(tools.length < 25, true);
 });
@@ -859,4 +860,182 @@ Deno.test("get_history filters by date, type and actor, and summarises", async (
   assertEquals(parsed.rows[2].orderId, 14);
   assertStringIncludes(parsed.notes.join(" "), '"BOOK_ENTRY":1');
   assertStringIncludes(parsed.notes.join(" "), '"API:cKm4":1');
+});
+
+/** Accounts for one period; magnitudes are positive per class, as CashCtrl returns them. */
+function ledger(
+  assets: number,
+  liabilities: number,
+  revenue: number,
+  expense: number,
+  extra: Row[] = [],
+) {
+  return json({
+    data: [
+      {
+        id: 1,
+        number: "1000",
+        name: "Kasse",
+        accountClass: "ASSET",
+        openingAmount: 0,
+        endAmount: assets,
+      },
+      {
+        id: 2,
+        number: "2000",
+        name: "Kreditoren",
+        accountClass: "LIABILITY",
+        openingAmount: 0,
+        endAmount: liabilities,
+      },
+      {
+        id: 3,
+        number: "3200",
+        name: "Ertrag",
+        accountClass: "REVENUE",
+        openingAmount: 0,
+        endAmount: revenue,
+      },
+      {
+        id: 4,
+        number: "6000",
+        name: "Aufwand",
+        accountClass: "EXPENSE",
+        openingAmount: 0,
+        endAmount: expense,
+      },
+      ...extra,
+    ],
+  });
+}
+
+type Row = Record<string, unknown>;
+
+function yearEndStub(
+  accountsByPeriod: Record<number, Response>,
+  result: number,
+  period: Row = {},
+) {
+  return (url: URL): Response => {
+    if (url.pathname === "/api/v1/fiscalperiod/list.json") {
+      return PERIODS.clone();
+    }
+    if (url.pathname === "/api/v1/account/list.json") {
+      const id = Number(url.searchParams.get("fiscalPeriodId"));
+      return (accountsByPeriod[id] ?? json({ data: [] })).clone();
+    }
+    if (url.pathname === "/api/v1/fiscalperiod/result") return json(result);
+    if (url.pathname === "/api/v1/fiscalperiod/read.json") {
+      return json({
+        data: { id: 2, isClosed: true, openMonthIds: [], ...period },
+      });
+    }
+    return json({ data: [] });
+  };
+}
+
+const checkOf = (parsed: { checks: { check: string }[] }, name: string) =>
+  parsed.checks.find((c) => c.check === name) as
+    | { status: string; detail: string; mismatches?: Row[]; accounts?: Row[] }
+    | undefined;
+
+Deno.test("an open period balances when assets minus liabilities equal the result", async () => {
+  const { client } = await connect(
+    yearEndStub({ 2: ledger(55526.7, 39534.7, 48593.42, 32601.42) }, 15992),
+  );
+  const parsed = JSON.parse(firstText(
+    await client.callTool({
+      name: "validate_year_end",
+      arguments: { fiscalPeriodId: 2 },
+    }),
+  ));
+  assertEquals(checkOf(parsed, "bilanz_balances")?.status, "ok");
+  assertEquals(checkOf(parsed, "result_consistent")?.status, "ok");
+  assertStringIncludes(
+    checkOf(parsed, "result_booked_to_equity")!.detail,
+    "not yet booked",
+  );
+});
+
+Deno.test("a closed period balances with the result already in equity", async () => {
+  // The regression this guards: assets equal liabilities *and* the result is
+  // non-zero, which is correct once the result has been carried to equity.
+  const { client } = await connect(
+    yearEndStub(
+      { 2: ledger(31692.58, 31692.58, 104116.34, 100716.41) },
+      3399.93,
+    ),
+  );
+  const parsed = JSON.parse(firstText(
+    await client.callTool({
+      name: "validate_year_end",
+      arguments: { fiscalPeriodId: 2 },
+    }),
+  ));
+  assertEquals(checkOf(parsed, "bilanz_balances")?.status, "ok");
+  assertStringIncludes(
+    checkOf(parsed, "bilanz_balances")!.detail,
+    "already booked into equity",
+  );
+});
+
+Deno.test("a gap matching neither zero nor the result is a failure", async () => {
+  const { client } = await connect(
+    yearEndStub({ 2: ledger(50000, 39534.7, 48593.42, 32601.42) }, 15992),
+  );
+  const parsed = JSON.parse(firstText(
+    await client.callTool({
+      name: "validate_year_end",
+      arguments: { fiscalPeriodId: 2 },
+    }),
+  ));
+  assertEquals(checkOf(parsed, "bilanz_balances")?.status, "fail");
+  assertStringIncludes(checkOf(parsed, "bilanz_balances")!.detail, "neither");
+});
+
+Deno.test("a broken carry-forward names the account", async () => {
+  const { client } = await connect(
+    yearEndStub({
+      1: ledger(100, 100, 0, 0),
+      2: ledger(100, 100, 0, 0, []),
+    }, 0),
+  );
+  const parsed = JSON.parse(firstText(
+    await client.callTool({
+      name: "validate_year_end",
+      arguments: { fiscalPeriodId: 2 },
+    }),
+  ));
+  // Opening is 0 in the stub while the prior period closed at 100.
+  assertEquals(checkOf(parsed, "opening_matches_prior_close")?.status, "fail");
+  assertEquals(
+    checkOf(parsed, "opening_matches_prior_close")!.mismatches!.length,
+    2,
+  );
+});
+
+Deno.test("clearing accounts that are not zero come back as a warning", async () => {
+  const { client } = await connect(
+    yearEndStub({
+      2: ledger(100, 100, 0, 0, [
+        {
+          id: 9,
+          number: "2222",
+          name: "Lohndurchlaufkonto",
+          accountClass: "LIABILITY",
+          openingAmount: 0,
+          endAmount: 12306.8,
+        },
+      ]),
+    }, 0),
+  );
+  const parsed = JSON.parse(firstText(
+    await client.callTool({
+      name: "validate_year_end",
+      arguments: { fiscalPeriodId: 2, clearingAccounts: ["2222"] },
+    }),
+  ));
+  const check = checkOf(parsed, "clearing_accounts_zero")!;
+  assertEquals(check.status, "warn");
+  assertEquals(check.accounts![0].balance, 12306.8);
 });

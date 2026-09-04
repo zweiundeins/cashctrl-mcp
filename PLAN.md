@@ -4,7 +4,7 @@ An MCP server for the CashCtrl accounting API, built on
 [`@zweiundeins/cashctrl-ts-sdk`](https://github.com/zweiundeins/cashctrl-ts-sdk)
 (v0.3.0, published to JSR and npm).
 
-Status: **phases 1 and 2 done** — 15 tools, 2 resources, 5 prompts, verified
+Status: **phases 1 and 2 done** — 16 tools, 2 resources, 5 prompts, verified
 against a live organisation. See [README.md](README.md). Only writes remain.
 
 ---
@@ -286,6 +286,26 @@ CASHCTRL_ENABLE_SALARY  off by default
 | 2 | ~~Reports, documents, MCP resources and prompts~~ | **done**: `get_report`, `download_document`, 2 resources, 3 prompts; 37 tests |
 | 3 | Write mode, against a **disposable trial organisation only** | first live exercise of the SDK's write paths; includes the bank-statement import chain below |
 | 4 | Packaging (dnt → npm), CI, README, `claude mcp add` instructions | |
+
+### Year-end arithmetic, measured
+
+Derived from the closed 2025 and open 2026 periods rather than assumed:
+
+- End amounts are **positive magnitudes per account class**, not signed.
+- Open period: `Σ ASSET.end − Σ LIABILITY.end = Ergebnis` (2026: 55526.70 −
+  39534.70 = 15992 = `fiscalperiod/result`).
+- Closed period: `Σ ASSET.end = Σ LIABILITY.end`, the result already carried
+  into equity (2025: 31692.58 = 31692.58, result 3399.93 sitting inside).
+  A check written for only one of these forms fails on the other half of the
+  time; `validate_year_end` accepts either and reports which.
+- `Σ REVENUE.end − Σ EXPENSE.end` equals `fiscalperiod/result` exactly in both.
+- Carry-forward holds per account: 76 balance-sheet accounts compared between
+  2025 and 2026, zero mismatches. P&L accounts all open at zero.
+- **Receivables do not reconcile naively.** 1100 closed 2026 at 25039.23 while
+  open sales documents summed to 27913.64 gross and 23098.82 with the credit
+  note negated — neither matches, and there are no order-less journal rows on
+  the account to explain it. Credit notes and invoices carried across periods
+  both distort it, so the tool reports the numbers instead of judging them.
 
 ### The change history is broader than documented
 

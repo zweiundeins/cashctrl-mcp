@@ -97,6 +97,8 @@ export function registerPrompts(server: McpServer): void {
       }.\n\n` +
         "Beginne mit get_fiscal_period_status: Ergebnis, abgeschlossene " +
         "Monate, offene Abschreibungen und Währungsdifferenzen.\n\n" +
+        "Lass dann validate_year_end laufen und geh die Checks durch: FAIL " +
+        "zuerst, dann WARN, dann die INFO-Abstimmungen.\n\n" +
         "Schau dann mit get_history nach, was beim letzten Jahresabschluss " +
         "tatsächlich gemacht wurde — Korrekturen, gelöschte Buchungen, " +
         "Statuswechsel. Das ist die beste Vorlage für die diesjährige " +

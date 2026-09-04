@@ -43,7 +43,7 @@ is the boundary that actually holds.
 
 ## Tools
 
-376 endpoints do not fit in a tool list, so this is fifteen curated tools plus a
+376 endpoints do not fit in a tool list, so this is sixteen curated tools plus a
 searchable escape hatch for everything else.
 
 | Tool | What it does |
@@ -59,6 +59,7 @@ searchable escape hatch for everything else.
 | `review_pending_import` | Shows what executing a staged import would do, before it runs |
 | `get_fiscal_period_status` | Result, closed months, pending depreciations and FX differences |
 | `get_history` | CashCtrl's activity log: who changed what, when |
+| `validate_year_end` | Runs the arithmetic a close has to satisfy, check by check |
 | `download_document` | Invoices, salary documents, reports and files, written to disk |
 | `search_api` | Finds endpoints among all 376 by keyword |
 | `describe_endpoint` | Full parameter documentation for one endpoint |
@@ -98,6 +99,38 @@ Two limits worth knowing:
   attributed to your API key. It does not modify the order record — the
   `downloaded` marker stays as the UI left it — but `download_document` is not
   invisible.
+
+## Validating a year-end close
+
+`validate_year_end` reports each check as `ok`, `warn`, `fail` or `info`. The
+arithmetic was derived from a real closed period rather than from theory:
+
+| Check | What must hold |
+| --- | --- |
+| `bilanz_balances` | Aktiven − Passiven equals **either 0 or the result** — see below |
+| `result_consistent` | Ertrag − Aufwand equals `fiscalperiod/result` |
+| `opening_matches_prior_close` | Every balance-sheet account opens where it closed last period |
+| `pl_accounts_open_at_zero` | Profit-and-loss accounts carry nothing forward |
+| `clearing_accounts_zero` | Durchlauf/Ausgleich/Verrechnung accounts end at zero |
+| `depreciations_booked`, `exchange_differences_booked` | Nothing left pending |
+| `months_closed` | Which months are still open |
+| `unbooked_import_entries` | No staged bank entries left behind |
+| `receivables_reconcile`, `payables_reconcile` | Reported, not judged — see below |
+
+**The balance sheet identity changes when the result is booked.** CashCtrl
+returns end amounts as positive magnitudes per account class, so an *open*
+period shows `Aktiven − Passiven = Ergebnis`, while a *closed* one shows
+`Aktiven = Passiven` with the result already inside equity. Checking only the
+first form marks every properly closed year as broken; checking only the second
+marks every open year as broken. The check accepts either and says which state
+it found, and a gap matching neither is the real failure.
+
+**Receivables and payables are reported, not judged.** On real data the naive
+identity does not close: credit notes carry an open amount of their own, and
+invoices stay open across period boundaries so `order/list` returns them under
+every period. The tool shows the open documents, the gross and credit-note-
+negated sums, and the account balances, and leaves the comparison to you rather
+than raising a false alarm every close.
 
 ## What it guards against
 
@@ -148,7 +181,7 @@ rather than errors. These are handled, and each is covered by a test:
 ## Development
 
 ```sh
-deno task test          # 48 tests, no network
+deno task test          # 53 tests, no network
 deno task check         # typecheck, lint, format
 deno task smoke         # read-only, against a live organisation (needs .env)
 deno task vendor:spec   # refresh spec/index.json from a tagged SDK release

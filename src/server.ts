@@ -14,6 +14,7 @@ import { registerReportTools } from "./tools/report.ts";
 import { registerDocumentTools } from "./tools/documents.ts";
 import { registerReviewTools, registerStagingTools } from "./tools/review.ts";
 import { registerHistoryTools } from "./tools/history.ts";
+import { registerYearEndTools } from "./tools/yearend.ts";
 import { registerResources } from "./context.ts";
 import { registerPrompts } from "./prompts.ts";
 
@@ -43,6 +44,7 @@ export function createServer(client: CashCtrlClient): McpServer {
   registerReviewTools(server, client);
   registerStagingTools(server, client);
   registerHistoryTools(server, client);
+  registerYearEndTools(server, client);
   registerDiscoveryTools(server, client);
   registerResources(server, client);
   registerPrompts(server);
