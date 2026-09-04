@@ -13,8 +13,8 @@
   "tasks": {
     "start": "deno run --allow-net --allow-env --allow-read --allow-write src/server.ts",
     "vendor:spec": "deno run --allow-net --allow-write --allow-read scripts/vendor-index.ts",
-    "test": "deno test --allow-read --allow-net --allow-env tests/",
-    "smoke": "deno run --allow-read --allow-net --allow-env --env-file scripts/smoke.ts",
+    "test": "deno test --allow-read --allow-net --allow-env --allow-write tests/",
+    "smoke": "deno run --allow-read --allow-write --allow-net --allow-env --env-file scripts/smoke.ts",
     "check": "deno check src/*.ts src/tools/*.ts scripts/*.ts tests/*.ts && deno lint && deno fmt --check",
     "ci": "deno task check && deno task test"
   },

@@ -45,6 +45,12 @@ export class CashCtrlClient {
     return await this.#http.get<T>(path, params);
   }
 
+  /** Raw response, for endpoints that hand back a file rather than JSON. */
+  async raw(path: string, params?: Params): Promise<Response> {
+    assertAllowed(this.config, "GET", path);
+    return await this.#http.raw("GET", path, params);
+  }
+
   async post<T>(path: string, params?: Params): Promise<T> {
     assertAllowed(this.config, "POST", path);
     return await this.#http.post<T>(path, params);

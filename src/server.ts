@@ -10,6 +10,10 @@ import { ConfigError, loadConfig } from "./config.ts";
 import { CashCtrlClient } from "./client.ts";
 import { registerReadTools } from "./tools/read.ts";
 import { registerDiscoveryTools } from "./tools/discovery.ts";
+import { registerReportTools } from "./tools/report.ts";
+import { registerDocumentTools } from "./tools/documents.ts";
+import { registerResources } from "./context.ts";
+import { registerPrompts } from "./prompts.ts";
 
 export function createServer(client: CashCtrlClient): McpServer {
   const server = new McpServer({
@@ -26,11 +30,17 @@ export function createServer(client: CashCtrlClient): McpServer {
       "`fiscalPeriodId` explicitly.\n" +
       "- `get_account_balance` picks the period from the date you give it.\n" +
       "- Lists return a column subset by default. Ask for `fields` when a " +
-      "column is missing rather than assuming it does not exist.",
+      "column is missing rather than assuming it does not exist.\n" +
+      "- The `cashctrl://org/summary` and `cashctrl://org/chart-of-accounts` " +
+      "resources answer most setup questions without a tool call.",
   });
 
   registerReadTools(server, client);
+  registerReportTools(server, client);
+  registerDocumentTools(server, client);
   registerDiscoveryTools(server, client);
+  registerResources(server, client);
+  registerPrompts(server);
   return server;
 }
 

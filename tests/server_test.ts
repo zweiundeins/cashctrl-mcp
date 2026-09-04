@@ -59,9 +59,11 @@ Deno.test("the tool surface stays small enough to be usable", async () => {
   assertEquals(names, [
     "call_api",
     "describe_endpoint",
+    "download_document",
     "get_account_balance",
     "get_journal",
     "get_record",
+    "get_report",
     "list_open_invoices",
     "list_records",
     "search",
@@ -255,4 +257,178 @@ Deno.test("get_journal says so when the range spans two periods", async () => {
   });
   const notes = JSON.parse(firstText(result)).notes.join(" ");
   assertStringIncludes(notes, "are missing");
+});
+
+Deno.test("reports list, then render through their own column definitions", async () => {
+  const { client } = await connect((url) => {
+    if (url.pathname === "/api/v1/report/tree.json") {
+      return json({
+        data: [{
+          id: "collection-1",
+          text: "Abschluss",
+          collectionId: 1,
+          data: [
+            { id: "element-1", text: "Bilanz", elementId: 1, type: "BALANCE" },
+            {
+              id: "element-2",
+              text: "Erfolgsrechnung",
+              elementId: 2,
+              type: "PLS",
+            },
+          ],
+        }],
+      });
+    }
+    if (url.pathname === "/api/v1/report/element/data.json") {
+      return json({
+        properties: {
+          columns: [
+            { title: "Bezeichnung", dataIndex: "text" },
+            { title: "2026", dataIndex: "dcEndAmount" },
+          ],
+        },
+        data: [{
+          text: "Ertrag",
+          dcEndAmount: 48593.42,
+          cls: "category level-0",
+          expanded: true,
+          data: [{
+            text: "Handelsertrag",
+            dcEndAmount: 14269.82,
+            accountId: 42,
+          }],
+        }],
+      });
+    }
+    return json({ data: [] });
+  });
+
+  const list = JSON.parse(firstText(
+    await client.callTool({ name: "get_report", arguments: {} }),
+  ));
+  assertEquals(list.length, 2);
+  assertEquals(list[0], {
+    elementId: 1,
+    name: "Bilanz",
+    type: "BALANCE",
+    collection: "Abschluss",
+  });
+
+  const report = JSON.parse(firstText(
+    await client.callTool({
+      name: "get_report",
+      arguments: { elementId: 2, fiscalPeriodId: 2 },
+    }),
+  ));
+  assertEquals(report.columns, ["2026"]);
+  assertEquals(report.rows[0], { level: 0, text: "Ertrag", "2026": 48593.42 });
+  assertEquals(report.rows[1].level, 1);
+  assertEquals(report.rows[1].accountId, 42);
+});
+
+Deno.test("download_document writes to disk and links the file", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    const { client } = await connect(
+      () =>
+        new Response("%PDF-1.4 fake", {
+          headers: {
+            "content-type": "application/pdf",
+            "content-disposition": 'attachment; filename="RE-202601.01.pdf"',
+          },
+        }),
+      { downloadDir: dir },
+    );
+    const result = await client.callTool({
+      name: "download_document",
+      arguments: { kind: "order_pdf", ids: [14] },
+    });
+    const link = (result.content as { type: string; uri?: string }[])
+      .find((c) => c.type === "resource_link")!;
+    assertEquals(link.uri, `file://${dir}/RE-202601.01.pdf`);
+    assertEquals(
+      await Deno.readTextFile(`${dir}/RE-202601.01.pdf`),
+      "%PDF-1.4 fake",
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("a server-chosen filename cannot escape the download directory", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    const { client } = await connect(
+      () =>
+        new Response("x", {
+          headers: {
+            "content-type": "application/pdf",
+            "content-disposition": 'attachment; filename="../../etc/passwd"',
+          },
+        }),
+      { downloadDir: dir },
+    );
+    const result = await client.callTool({
+      name: "download_document",
+      arguments: { kind: "order_pdf", ids: [1] },
+    });
+    const link = (result.content as { type: string; uri?: string }[])
+      .find((c) => c.type === "resource_link")!;
+    assertStringIncludes(link.uri!, `file://${dir}/`);
+    assertEquals(link.uri!.includes(".."), false);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("salary documents stay behind the module toggle", async () => {
+  const { client } = await connect(() => new Response("%PDF"));
+  const result = await client.callTool({
+    name: "download_document",
+    arguments: { kind: "salary_statement_pdf", ids: [1] },
+  });
+  assertEquals(result.isError, true);
+  assertStringIncludes(firstText(result), "salary module");
+});
+
+Deno.test("the organisation summary is served as a resource", async () => {
+  const { client } = await connect((url) => {
+    if (url.pathname === "/api/v1/fiscalperiod/list.json") {
+      return PERIODS.clone();
+    }
+    if (url.pathname === "/api/v1/tax/list.json") {
+      return json({ data: [{ id: 9, code: "USt77", currentPercentage: 7.7 }] });
+    }
+    return json({ data: [] });
+  });
+
+  const { resources } = await client.listResources();
+  assertEquals(
+    resources.map((r: { uri: string }) => r.uri).sort(),
+    ["cashctrl://org/chart-of-accounts", "cashctrl://org/summary"],
+  );
+
+  const read = await client.readResource({ uri: "cashctrl://org/summary" });
+  const body = JSON.parse((read.contents[0] as { text: string }).text);
+  assertEquals(body.organisation, "testorg");
+  assertEquals(body.fiscalPeriods[1].id, 2);
+  assertEquals(body.taxes[0].percentage, 7.7);
+});
+
+Deno.test("prompts carry the fiscal-period warning into the workflow", async () => {
+  const { client } = await connect(() => json({ data: [] }));
+  const { prompts } = await client.listPrompts();
+  assertEquals(prompts.map((p: { name: string }) => p.name).sort(), [
+    "monatsabschluss-check",
+    "mwst-abstimmung",
+    "offene-posten",
+  ]);
+
+  const prompt = await client.getPrompt({
+    name: "monatsabschluss-check",
+    arguments: { month: "2026-01" },
+  });
+  const body = (prompt.messages[0].content as { text: string }).text;
+  assertStringIncludes(body, "2026-01");
+  assertStringIncludes(body, "nicht");
 });

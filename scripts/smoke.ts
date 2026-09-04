@@ -13,6 +13,14 @@ import { loadConfig } from "../src/config.ts";
 import { CashCtrlClient } from "../src/client.ts";
 import { createServer } from "../src/server.ts";
 
+// Set before loadConfig, or the server keeps whatever the environment had.
+if (!Deno.env.get("CASHCTRL_DOWNLOAD_DIR")) {
+  Deno.env.set(
+    "CASHCTRL_DOWNLOAD_DIR",
+    await Deno.makeTempDir({ prefix: "cashctrl-smoke-" }),
+  );
+}
+
 const config = loadConfig();
 if (config.mode !== "read") {
   console.error("smoke test refuses to run outside read mode");
@@ -56,6 +64,32 @@ await show("get_journal", {
 });
 await show("search_api", { query: "vat report", limit: 3 });
 await show("list_records", { resource: "salary_statement", limit: 1 });
+await show("get_report", {});
+await show("get_report", { elementId: 2, fiscalPeriodId: 2 });
+
+const open = await client.callTool({
+  name: "list_open_invoices",
+  arguments: { limit: 1 },
+});
+const firstOrder =
+  JSON.parse((open.content as { text: string }[])[0].text).rows[0];
+if (firstOrder) {
+  await show("download_document", { kind: "order_pdf", ids: [firstOrder.id] });
+}
+
+console.log(`\n--- resources`);
+for (
+  const uri of ["cashctrl://org/summary", "cashctrl://org/chart-of-accounts"]
+) {
+  const read = await client.readResource({ uri });
+  const body = (read.contents[0] as { text: string }).text;
+  console.log(`  ${uri}: ${body.length} bytes`);
+}
+
+const { prompts } = await client.listPrompts();
+console.log(
+  `\n--- prompts: ${prompts.map((p: { name: string }) => p.name).join(", ")}`,
+);
 
 await client.close();
 await server.close();

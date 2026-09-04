@@ -43,7 +43,7 @@ is the boundary that actually holds.
 
 ## Tools
 
-376 endpoints do not fit in a tool list, so this is nine curated tools plus a
+376 endpoints do not fit in a tool list, so this is eleven curated tools plus a
 searchable escape hatch for everything else.
 
 | Tool | What it does |
@@ -54,9 +54,25 @@ searchable escape hatch for everything else.
 | `list_open_invoices` | Open or overdue orders, sales or purchase |
 | `get_journal` | Journal entries for a date range, account or associate |
 | `get_account_balance` | Balance of one account at a date |
+| `get_report` | Lists the available reports, or renders one for a period |
+| `download_document` | Invoices, salary documents, reports and files, written to disk |
 | `search_api` | Finds endpoints among all 376 by keyword |
 | `describe_endpoint` | Full parameter documentation for one endpoint |
 | `call_api` | Calls anything the tools above do not cover |
+
+## Resources and prompts
+
+Two resources carry context an agent would otherwise spend several calls
+rediscovering, and cost nothing until read:
+
+- `cashctrl://org/summary` — fiscal periods, currencies, tax codes, order
+  categories, locations
+- `cashctrl://org/chart-of-accounts` — every account with number, class and tax
+  code
+
+Three prompts wrap recurring work: `offene-posten`, `monatsabschluss-check`,
+`mwst-abstimmung`. Each one tells the model to establish the fiscal period
+before reading anything that depends on it.
 
 ## What it guards against
 
@@ -83,11 +99,19 @@ rather than errors. These are handled, and each is covered by a test:
   `next_start` stated, rather than truncated silently by the client.
 - **Filter bounds `gt`/`lt` include the boundary day.** Measured, not
   documented, so `get_journal`'s dates are inclusive at both ends.
+- **Report rows carry 30-odd display fields per node**, half of them
+  `dc`-prefixed duplicates. `get_report` follows the report's own
+  `properties.columns` for what to show and what to call it, rather than
+  guessing.
+- **Documents never enter the conversation.** They are written to
+  `CASHCTRL_DOWNLOAD_DIR` and returned as a path and a resource link. Filenames
+  chosen by the server are sanitised to a basename first, so a
+  `Content-Disposition` cannot write outside that directory.
 
 ## Development
 
 ```sh
-deno task test          # 31 tests, no network
+deno task test          # 37 tests, no network
 deno task check         # typecheck, lint, format
 deno task smoke         # read-only, against a live organisation (needs .env)
 deno task vendor:spec   # refresh spec/index.json from a tagged SDK release
@@ -103,9 +127,9 @@ aged past it.
 
 ## Not yet built
 
-Reports, document downloads, MCP resources and prompts, and every write tool.
-Writes need a disposable trial organisation first: creating an order or person
-consumes a sequence number permanently, even if the record is deleted again.
+Every write tool. Writes need a disposable trial organisation first: creating
+an order or person consumes a sequence number permanently, even if the record
+is deleted again.
 
 ## License
 

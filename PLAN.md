@@ -4,8 +4,8 @@ An MCP server for the CashCtrl accounting API, built on
 [`@zweiundeins/cashctrl-ts-sdk`](https://github.com/zweiundeins/cashctrl-ts-sdk)
 (v0.3.0, published to JSR and npm).
 
-Status: **phase 1 done** — 9 read tools, verified against a live organisation.
-See [README.md](README.md). Phase 2 next.
+Status: **phases 1 and 2 done** — 11 tools, 2 resources, 3 prompts, verified
+against a live organisation. See [README.md](README.md). Only writes remain.
 
 ---
 
@@ -283,7 +283,7 @@ CASHCTRL_ENABLE_SALARY  off by default
 | --- | --- | --- |
 | 0 | ~~Upstream spec fixes in `cashctrl-ts-sdk`~~ | **done, released as 0.3.0**: 59 file endpoints carry real media types, 4 broken SDK methods fixed, `SIDE_EFFECTING_GETS` exported, `spec/index.json` + `deno task index` added |
 | 1 | ~~Skeleton + read tools + `format.ts` + policy/deny list~~ | **done**: 9 tools, 31 tests, smoke-tested read-only against `zweiundeinsgmbh` |
-| 2 | Reports, documents, MCP resources and prompts | |
+| 2 | ~~Reports, documents, MCP resources and prompts~~ | **done**: `get_report`, `download_document`, 2 resources, 3 prompts; 37 tests |
 | 3 | Write mode, against a **disposable trial organisation only** | first live exercise of the SDK's write paths |
 | 4 | Packaging (dnt → npm), CI, README, `claude mcp add` instructions | |
 
