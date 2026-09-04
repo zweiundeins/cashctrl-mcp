@@ -5,6 +5,7 @@ import {
   parseCustom,
   renderList,
   shapeRow,
+  stripHtml,
 } from "../src/format.ts";
 
 Deno.test("projects to the requested columns and always keeps id", () => {
@@ -99,4 +100,14 @@ Deno.test("localized blobs embedded in a larger string are resolved", () => {
     shapeRow(row, { lang: "en", fields: ["debitName"] }).debitName,
     "1100 Accounts receivable",
   );
+});
+
+Deno.test("history messages lose their markup", () => {
+  assertEquals(
+    stripHtml(
+      `Rechnung '<a href="#order/document?id=14">RE-202412.01</a>' heruntergeladen.`,
+    ),
+    "Rechnung 'RE-202412.01' heruntergeladen.",
+  );
+  assertEquals(stripHtml("a &amp; b&nbsp;c"), "a & b c");
 });

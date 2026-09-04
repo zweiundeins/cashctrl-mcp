@@ -62,6 +62,7 @@ Deno.test("the tool surface stays small enough to be usable", async () => {
     "download_document",
     "get_account_balance",
     "get_fiscal_period_status",
+    "get_history",
     "get_journal",
     "get_record",
     "get_report",
@@ -794,4 +795,68 @@ Deno.test("an ignored entry never lands in wouldClose", async () => {
     parsed.value.ignoredWithMatch[0].matchedOrder.nr,
     "RE-202601.01",
   );
+});
+
+Deno.test("get_history filters by date, type and actor, and summarises", async () => {
+  const { client, calls } = await connect(() =>
+    json({
+      total: 3,
+      data: [
+        {
+          id: 1,
+          created: "2026-01-14 18:53:00.0",
+          createdBy: "info@z.ch",
+          type: "JOURNAL_IMPORT",
+          changeType: "CREATE",
+          message: "Buchungsimport 'statements (16).zip' erstellt.",
+        },
+        {
+          id: 2,
+          created: "2026-01-22 15:52:00.0",
+          createdBy: "info@z.ch",
+          type: "BOOK_ENTRY",
+          changeType: "DELETE",
+          message:
+            "Buchung '2025-12-03 Monatslohn' <a href=\"#x\">gelöscht</a>.",
+        },
+        {
+          id: 3,
+          created: "2026-01-22 15:56:00.0",
+          createdBy: "API:cKm4",
+          type: "ORDER",
+          changeType: "DOWNLOAD",
+          orderId: 14,
+          message: "Rechnung 'RE-1' heruntergeladen.",
+        },
+      ],
+    })
+  );
+
+  const parsed = JSON.parse(firstText(
+    await client.callTool({
+      name: "get_history",
+      arguments: {
+        fromDate: "2026-01-01",
+        toDate: "2026-01-31",
+        type: "BOOK_ENTRY",
+        createdBy: "info@z.ch",
+      },
+    }),
+  ));
+
+  assertEquals(JSON.parse(calls[0].searchParams.get("filter")!), [
+    { field: "created", comparison: "gt", value: "2026-01-01" },
+    { field: "created", comparison: "lt", value: "2026-01-31" },
+    { field: "type", comparison: "eq", value: "BOOK_ENTRY" },
+    { field: "createdBy", comparison: "eq", value: "info@z.ch" },
+  ]);
+
+  // Markup is stripped, so the model reads a sentence rather than a link.
+  assertEquals(
+    parsed.rows[1].what,
+    "Buchung '2025-12-03 Monatslohn' gelöscht.",
+  );
+  assertEquals(parsed.rows[2].orderId, 14);
+  assertStringIncludes(parsed.notes.join(" "), '"BOOK_ENTRY":1');
+  assertStringIncludes(parsed.notes.join(" "), '"API:cKm4":1');
 });

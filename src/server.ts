@@ -13,6 +13,7 @@ import { registerDiscoveryTools } from "./tools/discovery.ts";
 import { registerReportTools } from "./tools/report.ts";
 import { registerDocumentTools } from "./tools/documents.ts";
 import { registerReviewTools, registerStagingTools } from "./tools/review.ts";
+import { registerHistoryTools } from "./tools/history.ts";
 import { registerResources } from "./context.ts";
 import { registerPrompts } from "./prompts.ts";
 
@@ -41,6 +42,7 @@ export function createServer(client: CashCtrlClient): McpServer {
   registerDocumentTools(server, client);
   registerReviewTools(server, client);
   registerStagingTools(server, client);
+  registerHistoryTools(server, client);
   registerDiscoveryTools(server, client);
   registerResources(server, client);
   registerPrompts(server);

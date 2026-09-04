@@ -97,6 +97,10 @@ export function registerPrompts(server: McpServer): void {
       }.\n\n` +
         "Beginne mit get_fiscal_period_status: Ergebnis, abgeschlossene " +
         "Monate, offene Abschreibungen und Währungsdifferenzen.\n\n" +
+        "Schau dann mit get_history nach, was beim letzten Jahresabschluss " +
+        "tatsächlich gemacht wurde — Korrekturen, gelöschte Buchungen, " +
+        "Statuswechsel. Das ist die beste Vorlage für die diesjährige " +
+        "Liste.\n\n" +
         "Dann prüfe der Reihe nach:\n" +
         "- Offene Posten: Debitoren und Kreditoren, die am Jahresende noch " +
         "offen sind (list_open_invoices, beide Typen).\n" +

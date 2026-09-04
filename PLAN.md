@@ -4,7 +4,7 @@ An MCP server for the CashCtrl accounting API, built on
 [`@zweiundeins/cashctrl-ts-sdk`](https://github.com/zweiundeins/cashctrl-ts-sdk)
 (v0.3.0, published to JSR and npm).
 
-Status: **phases 1 and 2 done** — 14 tools, 2 resources, 5 prompts, verified
+Status: **phases 1 and 2 done** — 15 tools, 2 resources, 5 prompts, verified
 against a live organisation. See [README.md](README.md). Only writes remain.
 
 ---
@@ -286,6 +286,24 @@ CASHCTRL_ENABLE_SALARY  off by default
 | 2 | ~~Reports, documents, MCP resources and prompts~~ | **done**: `get_report`, `download_document`, 2 resources, 3 prompts; 37 tests |
 | 3 | Write mode, against a **disposable trial organisation only** | first live exercise of the SDK's write paths; includes the bank-statement import chain below |
 | 4 | Packaging (dnt → npm), CI, README, `claude mcp add` instructions | |
+
+### The change history is broader than documented
+
+`history/list.json` documents three parameters (`orderId`, `personId`,
+`statementId`) and no types. Measured on the live organisation: 881 entries
+spanning 20 months, **26 entity types** and 7 change types, with the generic
+`filter` array working on `created`, `type`, `changeType` and `createdBy`.
+January 2026 alone holds 82 events — 34 salary statement changes, 21 book entry
+changes of which 17 deletions, one journal import — which is a usable record of
+what a year-end close actually involved.
+
+It is an activity log rather than an audit trail: `UPDATE` records that
+something changed, never the old and new values. Reconstructing a value change
+still needs snapshots we do not take.
+
+Side effect worth remembering: fetching an order PDF appends a `DOWNLOAD`
+history entry under the API key. It leaves the order record itself untouched,
+including the `downloaded` marker.
 
 ### Bank statement import (phase 3)
 

@@ -54,6 +54,23 @@ function unescapeXml(s: string): string {
     .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
 }
 
+/**
+ * History messages are display HTML — `Rechnung '<a href="#order/...">RE-1</a>'
+ * erstellt.` — so the markup has to come off before a model reads them.
+ */
+export function stripHtml(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** Drops keys whose value carries nothing, so wide entities stay readable. */
 export function compact(row: Row): Row {
   const out: Row = {};

@@ -43,7 +43,7 @@ is the boundary that actually holds.
 
 ## Tools
 
-376 endpoints do not fit in a tool list, so this is fourteen curated tools plus a
+376 endpoints do not fit in a tool list, so this is fifteen curated tools plus a
 searchable escape hatch for everything else.
 
 | Tool | What it does |
@@ -58,6 +58,7 @@ searchable escape hatch for everything else.
 | `review_bank_import` | Reviews how imported bank statements were booked |
 | `review_pending_import` | Shows what executing a staged import would do, before it runs |
 | `get_fiscal_period_status` | Result, closed months, pending depreciations and FX differences |
+| `get_history` | CashCtrl's activity log: who changed what, when |
 | `download_document` | Invoices, salary documents, reports and files, written to disk |
 | `search_api` | Finds endpoints among all 376 by keyword |
 | `describe_endpoint` | Full parameter documentation for one endpoint |
@@ -77,6 +78,26 @@ Five prompts wrap recurring work: `offene-posten`, `monatsabschluss-check`,
 `bank-abgleich`, `mwst-abstimmung` and `jahresabschluss`. Each one tells the
 model to establish the fiscal period before reading anything that depends on
 it, and to name write steps as tasks rather than attempt them.
+
+## The change history
+
+`history/list.json` is documented as taking only `orderId`, `personId` and
+`statementId`, which undersells it. On a live organisation it covers **26
+entity types** — orders, book entries, salary statements, journal imports,
+accounts, tax rates, fiscal periods, files, master data — with seven change
+types (`CREATE`, `UPDATE`, `DELETE`, `STATUS`, `IMPORTED`, `DOWNLOAD`, `SEND`),
+and the generic `filter` array works on `created`, `type`, `changeType` and
+`createdBy`. `get_history` uses all of that.
+
+Two limits worth knowing:
+
+- **It is an activity log, not a diff.** An `UPDATE` says a record changed, not
+  which field or from what value to what. For before-and-after you would need
+  your own snapshots.
+- **Downloading an order or salary document appends a `DOWNLOAD` entry**
+  attributed to your API key. It does not modify the order record — the
+  `downloaded` marker stays as the UI left it — but `download_document` is not
+  invisible.
 
 ## What it guards against
 
@@ -127,7 +148,7 @@ rather than errors. These are handled, and each is covered by a test:
 ## Development
 
 ```sh
-deno task test          # 46 tests, no network
+deno task test          # 48 tests, no network
 deno task check         # typecheck, lint, format
 deno task smoke         # read-only, against a live organisation (needs .env)
 deno task vendor:spec   # refresh spec/index.json from a tagged SDK release

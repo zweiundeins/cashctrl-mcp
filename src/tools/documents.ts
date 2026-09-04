@@ -95,7 +95,10 @@ export function registerDocumentTools(
     description:
       "Downloads an invoice, salary document, report or stored file and " +
       "writes it to the server's download directory, returning the path. " +
-      "Binary content is never inlined into the conversation.\n\n" +
+      "Binary content is never inlined into the conversation. Note that " +
+      "downloading an order or salary document appends a DOWNLOAD entry to " +
+      "the CashCtrl history log, visible in get_history; the record itself is " +
+      "not changed.\n\n" +
       "Kinds: " + Object.keys(KINDS).join(", ") + ".",
     annotations: { readOnlyHint: true, openWorldHint: true },
     inputSchema: {
