@@ -2,6 +2,7 @@
 
 [![JSR](https://jsr.io/badges/@zweiundeins/cashctrl-mcp)](https://jsr.io/@zweiundeins/cashctrl-mcp)
 [![npm](https://img.shields.io/npm/v/@zweiundeins/cashctrl-mcp)](https://www.npmjs.com/package/@zweiundeins/cashctrl-mcp)
+[![CI](https://github.com/zweiundeins/cashctrl-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/zweiundeins/cashctrl-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 An MCP server for the [CashCtrl](https://cashctrl.com) accounting API, built on
