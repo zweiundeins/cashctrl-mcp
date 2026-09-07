@@ -11,7 +11,7 @@
 
 const args = Deno.args;
 const tagIdx = args.indexOf("--tag");
-const tag = tagIdx >= 0 ? args[tagIdx + 1] : "v0.3.0";
+const tag = tagIdx >= 0 ? args[tagIdx + 1] : "v0.5.0";
 const url =
   `https://raw.githubusercontent.com/zweiundeins/cashctrl-ts-sdk/${tag}/spec/index.json`;
 

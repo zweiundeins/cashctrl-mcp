@@ -30,6 +30,19 @@ minor releases.
   undocumented parameter silently, so a typo is not an error, it is a write that
   quietly did less than asked.
 
+### Changed
+
+- Depends on `@zweiundeins/cashctrl-ts-sdk` 0.5.0, with `spec/index.json`
+  re-vendored from that tag. The index gained two parameters CashCtrl's own
+  reference omits — `type` on `customfield/reorder` and
+  `customfield/group/reorder` — and 19 whose documented structure the old index
+  flattened to TEXT. That matters more here than in the SDK: the index is what
+  `search_api` and `describe_endpoint` report, and what `update_record` derives
+  its writable field list from, so a stale one described a call that could not
+  work.
+- `scripts/vendor-index.ts` defaults to the current tag rather than v0.3.0,
+  which it had drifted behind.
+
 ## [0.1.0] - 2026-09-04
 
 First release. Read-only: no tool in this version writes to CashCtrl.

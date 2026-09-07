@@ -3,7 +3,7 @@
   "specifiers": {
     "jsr:@std/assert@1": "1.0.19",
     "jsr:@std/internal@^1.0.12": "1.0.14",
-    "jsr:@zweiundeins/cashctrl-ts-sdk@0.4": "0.4.0",
+    "jsr:@zweiundeins/cashctrl-ts-sdk@0.5": "0.5.0",
     "npm:@modelcontextprotocol/sdk@^1.30.0": "1.30.0_zod@4.5.4",
     "npm:zod@^4.5.4": "4.5.4"
   },
@@ -17,8 +17,8 @@
     "@std/internal@1.0.14": {
       "integrity": "291516b3d4c35024d6ffbc0a9df5bf4c64116e05b50012cf846710152d2ffdf7"
     },
-    "@zweiundeins/cashctrl-ts-sdk@0.4.0": {
-      "integrity": "5b6873c8cf6ae9364a3b4661635c4a57a056141708c10856757fc5b2e597d13f"
+    "@zweiundeins/cashctrl-ts-sdk@0.5.0": {
+      "integrity": "66547421a1993f746051e7771f92027d3b8c174af22e2f06b7d51018ec6dc007"
     }
   },
   "npm": {
@@ -545,7 +545,7 @@
   "workspace": {
     "dependencies": [
       "jsr:@std/assert@1",
-      "jsr:@zweiundeins/cashctrl-ts-sdk@0.4",
+      "jsr:@zweiundeins/cashctrl-ts-sdk@0.5",
       "npm:@modelcontextprotocol/sdk@^1.30.0",
       "npm:zod@^4.5.4"
     ]
