@@ -11,6 +11,17 @@ minor releases.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-07
+
+Write mode arrives, and the package is on npm as well as JSR.
+
+**Upgrade from 0.1.0.** The default export is now the executable, so
+`deno run jsr:@zweiundeins/cashctrl-mcp` starts the server as documented. If you
+were importing `createServer` from the package root, import it from
+`@zweiundeins/cashctrl-mcp/server` instead. npm 0.1.0 was a manual publish and
+should be treated as superseded: it carries no provenance and its JSR namesake
+is a different, older build.
+
 ### Added
 
 - Four write tools, registered only when `CASHCTRL_MODE=write` and absent
@@ -78,3 +89,7 @@ First release. Read-only: no tool in this version writes to CashCtrl.
 - A policy layer that refuses the two GETs which mutate state, refuses
   `fiscalperiod/switch`, gates writes behind `CASHCTRL_MODE=write`, and keeps
   the salary module off unless `CASHCTRL_ENABLE_SALARY=1`.
+
+[unreleased]: https://github.com/zweiundeins/cashctrl-mcp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/zweiundeins/cashctrl-mcp/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/zweiundeins/cashctrl-mcp/releases/tag/v0.1.0

@@ -5,4 +5,4 @@
  * deno.json at runtime. The publish workflow fails when this and deno.json
  * disagree, so the duplication cannot drift silently.
  */
-export const VERSION = "0.1.0";
+export const VERSION = "0.2.0";
