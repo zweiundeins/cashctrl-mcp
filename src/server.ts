@@ -16,6 +16,7 @@ import { registerReviewTools, registerStagingTools } from "./tools/review.ts";
 import { registerHistoryTools } from "./tools/history.ts";
 import { registerYearEndTools } from "./tools/yearend.ts";
 import { registerBackupTools } from "./tools/backup.ts";
+import { registerWriteTools } from "./tools/write.ts";
 import { registerResources } from "./context.ts";
 import { registerPrompts } from "./prompts.ts";
 
@@ -47,6 +48,9 @@ export function createServer(client: CashCtrlClient): McpServer {
   registerHistoryTools(server, client);
   registerYearEndTools(server, client);
   registerBackupTools(server, client);
+  // Only in write mode: registering them in read mode would advertise tools
+  // whose every call the policy refuses.
+  if (client.config.mode === "write") registerWriteTools(server, client);
   registerDiscoveryTools(server, client);
   registerResources(server, client);
   registerPrompts(server);
