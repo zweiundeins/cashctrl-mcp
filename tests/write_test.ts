@@ -81,11 +81,15 @@ function harness(): {
     if (url.pathname === "/api/v1/account/list.json") {
       return json({
         data: [
-          { id: 3, number: "1020", name: "Bank" },
-          { id: 9, number: "3000", name: "Revenue" },
+          { id: 3, number: "1020", name: "Bank", currencyCode: "CHF" },
+          { id: 9, number: "3000", name: "Revenue", currencyCode: "CHF" },
+          { id: 12, number: "1021", name: "USD Bank", currencyCode: "USD" },
         ],
-        total: 2,
+        total: 3,
       });
+    }
+    if (url.pathname === "/api/v1/currency/list.json") {
+      return json({ data: [{ code: "CHF", isDefault: true }], total: 1 });
     }
     if (url.pathname === "/api/v1/fiscalperiod/list.json") {
       return json({
@@ -280,4 +284,32 @@ Deno.test("write tools are absent in read mode", async () => {
   }
   await readClient.close();
   await server.close();
+});
+
+Deno.test("a foreign-currency account is refused rather than booked at par", async () => {
+  const h = harness();
+  const { isError, text } = await call(h.client, "book_journal_entry", {
+    debitAccount: "1021", // USD, while the organisation books in CHF
+    creditAccount: "3000",
+    amount: 250,
+    date: "2026-03-04",
+    title: "Consulting",
+    confirm: true,
+  });
+  assert(isError);
+  assertStringIncludes(text, "USD");
+  assertEquals(h.calls.filter((c) => c.method === "POST").length, 0);
+  await h.close();
+});
+
+Deno.test("a confirmed delete does not read every target first", async () => {
+  const h = harness();
+  await call(h.client, "delete_record", {
+    resource: "person",
+    ids: [7, 7, 7],
+    confirm: true,
+  });
+  const reads = h.calls.filter((c) => c.path === "/api/v1/person/read.json");
+  assertEquals(reads.length, 0, "confirmed deletes should not pre-read");
+  await h.close();
 });

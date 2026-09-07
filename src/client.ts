@@ -16,6 +16,7 @@ export interface AccountSummary {
   accountClass?: string;
   taxId?: number | null;
   taxCode?: string | null;
+  currencyCode?: string | null;
 }
 
 export interface FiscalPeriod {
@@ -85,16 +86,33 @@ export class CashCtrlClient {
 
   /** Accounts by id, for turning debit/credit ids into something readable. */
   accounts(): Promise<Map<number, AccountSummary>> {
-    this.#accounts ??= this.listWithTotal<AccountSummary>(
-      "/api/v1/account/list.json",
-      { limit: 500 },
-    ).then((r) =>
-      new Map(r.data.map((a) => [a.id, {
-        ...a,
-        name: localize(String(a.name ?? ""), this.config.lang),
-      }]))
-    );
+    this.#accounts ??= this.#allAccounts();
     return this.#accounts;
+  }
+
+  /**
+   * Every account, not the first page of them.
+   *
+   * A truncated map is worse than a slow one here: `book_journal_entry`
+   * resolves account numbers through it, and a missing entry is reported as
+   * "no such account" - which is a lie that blocks a legitimate booking.
+   */
+  async #allAccounts(): Promise<Map<number, AccountSummary>> {
+    const map = new Map<number, AccountSummary>();
+    const limit = 500;
+    for (let start = 0;; start += limit) {
+      const { data, total } = await this.listWithTotal<AccountSummary>(
+        "/api/v1/account/list.json",
+        { limit, start },
+      );
+      for (const a of data) {
+        map.set(a.id, {
+          ...a,
+          name: localize(String(a.name ?? ""), this.config.lang),
+        });
+      }
+      if (!data.length || map.size >= total) return map;
+    }
   }
 
   fiscalPeriods(): Promise<FiscalPeriod[]> {

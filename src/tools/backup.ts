@@ -1,4 +1,5 @@
 import { mkdir, stat } from "node:fs/promises";
+import { dirname } from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { DatabaseSync } from "node:sqlite";
@@ -163,7 +164,9 @@ export function registerBackupTools(
     },
   }, async (args) => {
     const path = args.dbPath ?? defaultDb();
-    await mkdir(path.slice(0, path.lastIndexOf("/")), { recursive: true });
+    // `dirname`, not a lastIndexOf slice: "backup.db" would otherwise
+    // create a directory called "backup.d".
+    await mkdir(dirname(path), { recursive: true });
     const db = openDatabase(path);
     const now = new Date().toISOString();
     const tally: Tally = { seen: 0, created: 0, changed: 0, gone: 0 };

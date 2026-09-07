@@ -23,6 +23,15 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME does not match deno.json version $version"
             exit 1
           fi
+          # src/version.ts is what MCP clients see in `initialize`. It cannot
+          # read deno.json (the npm build has none at runtime), so the two are
+          # duplicated - and duplication that nothing checks is duplication
+          # that drifts.
+          reported="$(deno eval 'const { VERSION } = await import("./src/version.ts"); console.log(VERSION)')"
+          if [ "$reported" != "$version" ]; then
+            echo "::error::src/version.ts says $reported, deno.json says $version"
+            exit 1
+          fi
 
       - name: Test
         run: |

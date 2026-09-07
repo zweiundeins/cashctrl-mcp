@@ -6,6 +6,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CashCtrlClient } from "./client.ts";
+import { VERSION } from "./version.ts";
 import { registerReadTools } from "./tools/read.ts";
 import { registerDiscoveryTools } from "./tools/discovery.ts";
 import { registerReportTools } from "./tools/report.ts";
@@ -21,7 +22,7 @@ import { registerPrompts } from "./prompts.ts";
 export function createServer(client: CashCtrlClient): McpServer {
   const server = new McpServer({
     name: "cashctrl",
-    version: "0.1.0",
+    version: VERSION,
   }, {
     instructions:
       `CashCtrl accounting for the organisation "${client.config.organisation}", ` +

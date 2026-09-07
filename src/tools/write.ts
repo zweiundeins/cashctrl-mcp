@@ -25,6 +25,7 @@
 
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { mergeUpdate } from "@zweiundeins/cashctrl-ts-sdk";
 import type { CashCtrlClient } from "../client.ts";
 import { periodForDate } from "../client.ts";
 import { RESOURCE_NAMES, RESOURCES } from "../resources.ts";
@@ -199,20 +200,21 @@ export function registerWriteTools(
       throw new Error(`No ${args.resource} with id ${args.id}.`);
     }
 
-    // The writable set is the update endpoint's own parameter list, so
-    // read-only fields like `created` are never echoed back.
-    const merged: Row = {};
-    for (const param of endpoint.params) {
-      const value = existing[param.name];
-      // `undefined` means the read did not carry the field; sending it would
-      // clear the value, so leave it out and let CashCtrl keep its own.
-      if (value !== undefined) merged[param.name] = value;
-    }
-    for (const [field, value] of Object.entries(args.changes)) {
-      if (value !== undefined) merged[field] = value;
-    }
+    // The SDK's own read-modify-write, rather than a second copy of it: this
+    // is the one routine whose correctness the whole tool exists to
+    // guarantee, and two copies would drift. The writable set is the update
+    // endpoint's own parameter list, so read-only fields like `created` are
+    // never echoed back.
+    const merged: Row = mergeUpdate<Row>(
+      existing,
+      args.changes,
+      endpoint.params.map((p) => p.name),
+    );
     merged.id = args.id;
 
+    const preserving = Object.keys(merged).filter((k) =>
+      k !== "id" && !(k in args.changes)
+    );
     const changed = Object.entries(args.changes).map(([field, value]) => ({
       field,
       from: existing[field] ?? null,
@@ -224,12 +226,10 @@ export function registerWriteTools(
         would_call: endpoint.path,
         what: `update ${args.resource} ${args.id}`,
         changing: changed,
-        preserving: Object.keys(merged).filter((k) =>
-          k !== "id" && !(k in args.changes)
-        ),
+        preserving,
         params: merged,
       }, [
-        `${Object.keys(merged).length - 1} fields are resent to preserve them.`,
+        `${preserving.length} fields are resent unchanged, to preserve them.`,
         "Nothing was written. Re-issue with confirm: true to apply.",
       ]));
     }
@@ -266,15 +266,15 @@ export function registerWriteTools(
     const endpoint = endpointFor(args.resource, "delete");
     const base = RESOURCES[args.resource].base;
 
-    // Show what is about to go, by name rather than by id.
-    const targets: Row[] = [];
-    for (const id of args.ids) {
-      const record = await client.read<Row>(`${base}/read.json`, { id })
-        .catch(() => undefined);
-      targets.push({ id, record: record ?? "not found" });
-    }
-
     if (!args.confirm) {
+      // Only for the preview. Doing this on a confirmed delete would fire one
+      // GET per id and discard every one of them.
+      const targets: Row[] = [];
+      for (const id of args.ids) {
+        const record = await client.read<Row>(`${base}/read.json`, { id })
+          .catch(() => undefined);
+        targets.push({ id, record: record ?? "not found" });
+      }
       return text(preview(
         `delete ${args.ids.length} ${args.resource} record(s)`,
         endpoint.path,
@@ -330,6 +330,29 @@ export function registerWriteTools(
     };
     const debit = resolve(args.debitAccount);
     const credit = resolve(args.creditAccount);
+
+    const currencies = await client.listWithTotal<
+      { code: string; isDefault?: boolean }
+    >("/api/v1/currency/list.json");
+    const defaultCurrency = currencies.data.find((c) => c.isDefault)?.code ??
+      "the default currency";
+
+    // journal/create takes no currencyId here, so CashCtrl posts the amount in
+    // the organisation's default currency. On a foreign-currency account that
+    // silently books the wrong number, which is the exact class of mistake
+    // this tool exists to prevent - so refuse rather than guess a rate.
+    for (const account of [debit, credit]) {
+      const code = account.currencyCode;
+      if (code && code !== defaultCurrency) {
+        throw new Error(
+          `Account ${account.number} ${account.name} is in ${code}, not the ` +
+            `organisation's ${defaultCurrency}. This tool posts in the ` +
+            `default currency only, so the amount would be booked as ` +
+            `${defaultCurrency} ${args.amount}. Book it in the CashCtrl UI, ` +
+            `or use call_api with an explicit currencyId and currencyRate.`,
+        );
+      }
+    }
 
     const periods = await client.fiscalPeriods();
     const period = periodForDate(periods, args.date);
