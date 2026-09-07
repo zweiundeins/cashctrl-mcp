@@ -5,9 +5,7 @@
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { ConfigError, loadConfig } from "./config.ts";
-import { CashCtrlClient } from "./client.ts";
+import type { CashCtrlClient } from "./client.ts";
 import { registerReadTools } from "./tools/read.ts";
 import { registerDiscoveryTools } from "./tools/discovery.ts";
 import { registerReportTools } from "./tools/report.ts";
@@ -55,23 +53,4 @@ export function createServer(client: CashCtrlClient): McpServer {
   registerResources(server, client);
   registerPrompts(server);
   return server;
-}
-
-if (import.meta.main) {
-  try {
-    const config = loadConfig();
-    const server = createServer(new CashCtrlClient(config));
-    await server.connect(new StdioServerTransport());
-  } catch (err) {
-    if (err instanceof ConfigError) {
-      console.error(
-        `cashctrl-mcp: ${err.message}\n\n` +
-          "Required: CASHCTRL_ORGANISATION, CASHCTRL_APIKEY.\n" +
-          "Optional: CASHCTRL_LANG (de), CASHCTRL_MODE (read), " +
-          "CASHCTRL_DOWNLOAD_DIR, CASHCTRL_ENABLE_SALARY.",
-      );
-      Deno.exit(2);
-    }
-    throw err;
-  }
 }

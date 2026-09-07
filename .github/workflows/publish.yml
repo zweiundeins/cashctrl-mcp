@@ -6,13 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  publish:
+  verify:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      # JSR authenticates over OIDC, so there is no token secret. The package
-      # must be linked to this repository in its jsr.io settings first.
-      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: denoland/setup-deno@v2
@@ -36,4 +31,52 @@ jobs:
           deno check src/*.ts src/backup/*.ts src/tools/*.ts
           deno test --allow-read --allow-net --allow-env --allow-write tests/
 
+  jsr:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # JSR authenticates over OIDC, so there is no token secret. The package
+      # must be linked to this repository in its jsr.io settings first.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
       - run: deno publish
+
+  npm:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # npm trusted publishing (OIDC) and provenance. With a trusted publisher
+      # configured on npmjs.com there is no NPM_TOKEN.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - uses: actions/setup-node@v6
+        with:
+          # Matches the package's own engines floor: node:sqlite, which the
+          # backup tools use, is only unflagged from Node 24.
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm >= 11.5.1; without it the CLI falls back
+      # to looking for a token and fails.
+      - name: Upgrade npm for trusted publishing
+        run: |
+          npm install -g npm@latest
+          npm --version
+
+      # dnt rewrites the .ts import extensions and emits ESM + CJS + types,
+      # producing an ordinary npm package with no Deno dependency.
+      - name: Build with dnt
+        run: deno task build:npm
+
+      - name: Publish
+        run: npm publish ./npm --access public --provenance

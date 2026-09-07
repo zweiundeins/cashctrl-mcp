@@ -1,5 +1,9 @@
 # cashctrl-mcp
 
+[![JSR](https://jsr.io/badges/@zweiundeins/cashctrl-mcp)](https://jsr.io/@zweiundeins/cashctrl-mcp)
+[![npm](https://img.shields.io/npm/v/@zweiundeins/cashctrl-mcp)](https://www.npmjs.com/package/@zweiundeins/cashctrl-mcp)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 An MCP server for the [CashCtrl](https://cashctrl.com) accounting API, built on
 [`@zweiundeins/cashctrl-ts-sdk`](https://github.com/zweiundeins/cashctrl-ts-sdk).
 
@@ -16,6 +20,9 @@ user**. The key is scoped to one organisation and inherits the role you give it
 — **assign a read-only role**. That role, not this server's `CASHCTRL_MODE`, is
 the boundary that actually holds.
 
+With Deno, which is the version worth preferring — the permission flags are a
+real boundary, and they confine the server to one host and one directory:
+
 ```sh
 claude mcp add cashctrl \
   --env CASHCTRL_ORGANISATION=myorg \
@@ -25,6 +32,18 @@ claude mcp add cashctrl \
      --allow-env=CASHCTRL_ORGANISATION,CASHCTRL_APIKEY,CASHCTRL_LANG,CASHCTRL_MODE,CASHCTRL_DOWNLOAD_DIR,CASHCTRL_ENABLE_SALARY \
      --allow-read=$HOME/cashctrl --allow-write=$HOME/cashctrl \
      jsr:@zweiundeins/cashctrl-mcp
+```
+
+Or from npm, if Deno is not already there. Node 24 or newer: the backup tools
+use `node:sqlite`, which is only unflagged from 24. Node has no permission
+flags, so the server runs with whatever access the process has — the API key's
+own role is then the only boundary that holds.
+
+```sh
+claude mcp add cashctrl \
+  --env CASHCTRL_ORGANISATION=myorg \
+  --env CASHCTRL_APIKEY=... \
+  -- npx -y @zweiundeins/cashctrl-mcp
 ```
 
 Or the equivalent in `claude_desktop_config.json`:

@@ -30,8 +30,22 @@ minor releases.
   undocumented parameter silently, so a typo is not an error, it is a write that
   quietly did less than asked.
 
+- Published to npm as well as JSR, built with `@deno/dnt`.
+  `npx -y
+  @zweiundeins/cashctrl-mcp` runs the server, so an MCP client config
+  needs no Deno. Needs Node 24: the backup tools use `node:sqlite`, which is
+  only unflagged from 24. The Deno install stays the one worth preferring,
+  because its permission flags confine the server to one host and one directory,
+  and Node has no equivalent.
+
 ### Changed
 
+- The server no longer calls any Deno API. `node:process` and `node:fs/promises`
+  work in both runtimes, so the npm build needs no shims and the source stays
+  runtime-neutral.
+- The entry point moved to `src/cli.ts`. `import.meta.main` is a Deno-ism that
+  never fires under Node, and a bin script has to run on import; `src/server.ts`
+  is now purely importable.
 - Depends on `@zweiundeins/cashctrl-ts-sdk` 0.5.0, with `spec/index.json`
   re-vendored from that tag. The index gained two parameters CashCtrl's own
   reference omits — `type` on `customfield/reorder` and

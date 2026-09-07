@@ -1,3 +1,4 @@
+import { mkdir, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -163,9 +164,9 @@ export function registerDocumentTools(
       fallback,
     );
 
-    await Deno.mkdir(client.config.downloadDir, { recursive: true });
+    await mkdir(client.config.downloadDir, { recursive: true });
     const path = `${client.config.downloadDir.replace(/\/+$/, "")}/${name}`;
-    await Deno.writeFile(path, bytes);
+    await writeFile(path, bytes);
 
     const mimeType = response.headers.get("content-type")?.split(";")[0] ??
       kind.mimeType;
