@@ -346,3 +346,5 @@ the same invoices the UI would. Until it is, upload in the UI and use
 ## License
 
 MIT
+
+Built and maintained by [zwei und eins gmbh](https://zweiundeins.gmbh), Aarberg, Switzerland.
